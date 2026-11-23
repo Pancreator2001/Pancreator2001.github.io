@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ajedrez contra Maia</title>
+<style>
+  :root {
+    --bg: #f4ecdf; --panel: #fffaf2; --ink: #2d2218; --muted: #7a6a58; --line: #ddd0ba;
+    --accent: #7b1f2a; --gold: #c9a227; --light: #f0d9b5; --dark: #b58863;
+    --ok: #2e7d32; --warn: #b26a00; --bad: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px -apple-system, system-ui, "Segoe UI", sans-serif; }
+  body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  header { background: #5a3a24; color: #fff; padding: 10px 16px; font-weight: 600; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+  header .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; font-size: 18px; position: relative; }
+  header .logo b { position: absolute; right: 2px; bottom: -1px; font-size: 10px; color: var(--gold); }
+  main { max-width: 980px; margin: 0 auto; padding: 12px 16px 24px; display: grid; gap: 12px; }
+  @media (min-width: 820px) { main { grid-template-columns: minmax(0, 520px) minmax(0, 1fr); align-items: start; } }
+  .board-wrap { background: #6b4a33; border-radius: 12px; padding: 8px; }
+  #board { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; width: 100%; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  .sq { position: relative; display: grid; place-items: center; font-size: min(9.2vw, 52px); line-height: 1; cursor: pointer; }
+  .sq.l { background: var(--light); } .sq.d { background: var(--dark); }
+  .sq.last::after { content: ""; position: absolute; inset: 0; background: rgba(255, 221, 0, .38); }
+  .sq.maia::after { content: ""; position: absolute; inset: 0; background: rgba(220, 60, 40, .42); box-shadow: inset 0 0 0 3px #c0392b; }
+  .sq.sel::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 4px #1e88e5; }
+  .sq.lift::after { content: ""; position: absolute; inset: 0; background: rgba(30, 136, 229, .3); }
+  .sq .pc { position: relative; z-index: 1; }
+  .pc.w { color: #fff; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 0 2px #000, 1px 1px 0 #333; }
+  .pc.b { color: #111; text-shadow: 0 0 1px #fff4; }
+  .coord { position: absolute; font-size: 10px; color: rgba(0,0,0,.55); z-index: 1; }
+  .coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 2px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .status { display: grid; gap: 6px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: #bbb; vertical-align: 1px; }
+  .dot.on { background: var(--ok); } .dot.wait { background: var(--warn); } .dot.off { background: var(--bad); }
+  #info { font-weight: 600; color: var(--ok); min-height: 1.3em; }
+  #info.warn { color: var(--warn); } #info.bad { color: var(--bad); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, select { font: inherit; border-radius: 10px; border: 1px solid #c9b79a; background: #efe4d2; color: var(--ink); padding: 9px 12px; min-height: 42px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .45; }
+  .row > button { flex: 1 1 0; min-width: 0; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; }
+  label.chk input { width: 20px; height: 20px; }
+  .field { display: inline-flex; gap: 6px; align-items: center; }
+  #moves { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 70px; max-height: 200px; overflow-y: auto; line-height: 1.6; font-size: 15px; }
+  #moves .n { color: var(--muted); }
+  #log { font: 12px ui-monospace, Menlo, Consolas, monospace; color: #3a342c; background: #eae2d3; border-radius: 10px; padding: 6px 8px; max-height: 110px; overflow-y: auto; white-space: pre-wrap; }
+  .muted { color: var(--muted); font-size: 13px; }
+  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 6px; text-transform: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="ajedrez.js"></script>
+<script src="maia.js"></script>
+<script src="chessnut.js"></script>
+</head>
+<body>
+<header><span class="logo">♞<b>M</b></span> Ajedrez contra Maia <span class="muted" style="color:#e8d9c4;font-weight:400;font-size:13px">· prueba web</span></header>
+<main>
+  <section>
+    <div class="board-wrap"><div id="board"></div></div>
+  </section>
+  <section style="display:grid;gap:12px">
+    <div class="card status">
+      <div><span id="nutDot" class="dot"></span><span id="nutText">Chessnut: sin conectar</span></div>
+      <div><span id="maiaDot" class="dot wait"></span><span id="maiaText">Cargando Maia...</span></div>
+      <div id="info"></div>
+    </div>
+    <div class="row">
+      <button id="btnConnect" class="primary">Conectar Chessnut</button>
+    </div>
+    <div class="row" id="gameRow">
+      <button id="btnSetup">Montar posición</button>
+      <button id="btnWhite" hidden>Empiezan blancas</button>
+      <button id="btnBlack" hidden>Empiezan negras</button>
+      <button id="btnCancel" hidden>Cancelar</button>
+      <button id="btnSend">Enviar partida</button>
+    </div>
+    <div class="card">
+      <div class="row">
+        <span class="field">Maia <select id="level"></select></span>
+        <span class="field">Juegas con <select id="color"><option value="w">Blancas</option><option value="b">Negras</option></select></span>
+        <label class="chk"><input type="checkbox" id="variety" checked> Variedad</label>
+      </div>
+    </div>
+    <div>
+      <h2>Jugadas</h2>
+      <div id="moves"><span class="muted">Coloca la posición inicial en el tablero (o toca las piezas en la pantalla) para empezar.</span></div>
+    </div>
+    <div>
+      <h2>Registro</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

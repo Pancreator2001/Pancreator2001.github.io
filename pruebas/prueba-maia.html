@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de Maia en el navegador</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 16px; background: #f6efe3; color: #2d2218; }
+  pre { background: #fff; border: 1px solid #d8c9b0; padding: 10px; white-space: pre-wrap; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="../ajedrez.js"></script>
+<script src="../maia.js"></script>
+</head>
+<body>
+<h1>Maia en el navegador: comparación con Lc0</h1>
+<p id="estado">Cargando...</p>
+<pre id="salida"></pre>
+<script>
+window.resultado = null;
+(async () => {
+  const out = document.getElementById('salida'), st = document.getElementById('estado');
+  try {
+    ort.env.wasm.numThreads = 1;
+    st.textContent = 'Tabla de jugadas: ' + POLICY_MOVES.length + ' (Lc0: 1858). Cargando la red...';
+    const maia = new Maia('../redes/');
+    const t0 = performance.now();
+    await maia.session(1100);
+    const tLoad = performance.now() - t0;
+    const ref = await (await fetch('referencia-lc0.json')).json();
+    const rep = await compareWithLc0(maia, ref);
+    // velocidad: 20 veces la misma posición
+    const p = new Partida();
+    const t1 = performance.now();
+    for (let i = 0; i < 20; i++) await maia.shares(p, 1100);
+    const per = (performance.now() - t1) / 20;
+    window.resultado = { tabla: POLICY_MOVES.length, cargaMs: Math.round(tLoad), msPorJugada: +per.toFixed(1), rep };
+    st.textContent = 'Hecho.';
+    out.textContent = JSON.stringify(window.resultado, null, 1);
+  } catch (e) {
+    st.textContent = 'ERROR: ' + e;
+    window.resultado = { error: String(e && e.stack || e) };
+  }
+})();
+</script>
+</body>
+</html>

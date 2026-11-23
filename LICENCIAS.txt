@@ -1,0 +1,15 @@
+AJEDREZ CONTRA MAIA (WEB) - PROCEDENCIA Y LICENCIAS
+==================================================
+
+* Las redes neuronales Maia (redes/maia-1100.onnx ... maia-1900.onnx), del
+  proyecto Maia Chess (CSSLab, Universidad de Toronto), entrenadas con
+  partidas de Lichess de jugadores de cada nivel para jugar como ellos.
+  Licencia GPL-3.0 (texto completo en LICENCIA-GPL-3.0.txt).
+  Original: https://github.com/CSSLab/maia-chess
+  Aqui estan pasadas del formato de Lc0 (maia-NNNN.pb.gz) a ONNX con la
+  orden "lc0 leela2onnx" de Leela Chess Zero 0.32.1 (GPL-3.0,
+  https://github.com/LeelaChessZero/lc0), sin ningun otro cambio.
+
+* ONNX Runtime Web 1.20.1 (Microsoft, licencia MIT), que hace funcionar la
+  red en el navegador; la pagina lo carga de cdn.jsdelivr.net.
+  https://github.com/microsoft/onnxruntime
