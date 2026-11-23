@@ -4,98 +4,130 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#5B3A24">
 <title>Ajedrez contra Maia</title>
 <style>
-  :root {
-    --bg: #f4ecdf; --panel: #fffaf2; --ink: #2d2218; --muted: #7a6a58; --line: #ddd0ba;
-    --accent: #7b1f2a; --gold: #c9a227; --light: #f0d9b5; --dark: #b58863;
-    --ok: #2e7d32; --warn: #b26a00; --bad: #b3261e;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px -apple-system, system-ui, "Segoe UI", sans-serif; }
-  body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
-  header { background: #5a3a24; color: #fff; padding: 10px 16px; font-weight: 600; font-size: 18px; display: flex; align-items: center; gap: 10px; }
-  header .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; font-size: 18px; position: relative; }
-  header .logo b { position: absolute; right: 2px; bottom: -1px; font-size: 10px; color: var(--gold); }
-  main { max-width: 980px; margin: 0 auto; padding: 12px 16px 24px; display: grid; gap: 12px; }
-  @media (min-width: 820px) { main { grid-template-columns: minmax(0, 520px) minmax(0, 1fr); align-items: start; } }
-  .board-wrap { background: #6b4a33; border-radius: 12px; padding: 8px; }
-  #board { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; width: 100%; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-  .sq { position: relative; display: grid; place-items: center; font-size: min(9.2vw, 52px); line-height: 1; cursor: pointer; }
-  .sq.l { background: var(--light); } .sq.d { background: var(--dark); }
-  .sq.last::after { content: ""; position: absolute; inset: 0; background: rgba(255, 221, 0, .38); }
-  .sq.maia::after { content: ""; position: absolute; inset: 0; background: rgba(220, 60, 40, .42); box-shadow: inset 0 0 0 3px #c0392b; }
-  .sq.sel::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 4px #1e88e5; }
-  .sq.lift::after { content: ""; position: absolute; inset: 0; background: rgba(30, 136, 229, .3); }
-  .sq .pc { position: relative; z-index: 1; }
-  .pc.w { color: #fff; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 0 2px #000, 1px 1px 0 #333; }
-  .pc.b { color: #111; text-shadow: 0 0 1px #fff4; }
-  .coord { position: absolute; font-size: 10px; color: rgba(0,0,0,.55); z-index: 1; }
-  .coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 2px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-  .status { display: grid; gap: 6px; }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: #bbb; vertical-align: 1px; }
-  .dot.on { background: var(--ok); } .dot.wait { background: var(--warn); } .dot.off { background: var(--bad); }
-  #info { font-weight: 600; color: var(--ok); min-height: 1.3em; }
-  #info.warn { color: var(--warn); } #info.bad { color: var(--bad); }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  button, select { font: inherit; border-radius: 10px; border: 1px solid #c9b79a; background: #efe4d2; color: var(--ink); padding: 9px 12px; min-height: 42px; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  :root { --bg: #F4EEE2; --ink: #2B2118; --brown: #5B3A24; --muted: #8A7E6E; --line: #E2D6C2; --btn: #EFE6D8; --btnline: #CDBB9E; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  #app { height: 100dvh; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+  header { background: var(--brown); color: #FFF5E6; font-weight: 700; font-size: 17px; padding: calc(6px + env(safe-area-inset-top)) 14px 6px; flex: none; }
+  #top { flex: none; padding: 6px 8px 0; }
+  #boardRow { display: flex; gap: 6px; justify-content: center; }
+  #bar { width: 30px; flex: none; }
+  #board { width: var(--bs); height: var(--bs); touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #opening { font-size: 12px; color: #6B5440; text-align: center; min-height: 16px; padding: 2px 4px 0; line-height: 1.3; white-space: pre-line; }
+  #cands { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; padding: 0 4px; }
+  #cands div { font-size: 14px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cands .sc { color: var(--brown); } #cands .pv { color: #9A8E7E; font-size: 85%; }
+  #panel { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 12px 16px; }
+  #clock { width: 100%; height: 54px; display: block; margin: 2px 0 6px; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  #status { line-height: 1.55; }
+  #status .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 9px; vertical-align: -1px; }
+  #info { padding-left: 20px; min-height: 1.4em; }
+  #info.go { color: #1E6A2C; font-weight: 700; } #info.bad { color: #C8402F; font-weight: 700; } #info.amber { color: #B06A00; font-weight: 700; }
+  .sep { height: 1px; background: #E8DDCB; margin: 8px 0 4px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  label.chk { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; }
+  label.chk input { width: 20px; height: 20px; accent-color: #00897B; margin: 0; }
+  .lbl { color: var(--brown); font-size: 14px; }
+  select { font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: none; border-bottom: 1px solid var(--btnline); padding: 4px 2px; max-width: 100%; }
+  #material { font-size: 16px; padding: 2px 4px; }
+  #material .k { color: var(--brown); } #material .r { color: #9A8E7E; font-size: 85%; }
+  #turn { background: #FFF3D6; border: 1px solid var(--btnline); border-radius: 14px; color: var(--brown); padding: 3px 10px; font-size: 15px; cursor: pointer; }
+  #depth { flex: 1; text-align: right; color: var(--muted); font-size: 13px; }
+  .btns { display: flex; gap: 6px; margin-top: 8px; }
+  .btns button { flex: 1 1 0; min-width: 0; }
+  button { font: inherit; font-size: 14px; color: var(--ink); background: var(--btn); border: 1px solid var(--btnline); border-radius: 8px; padding: 9px 6px; min-height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   button:disabled { opacity: .45; }
-  .row > button { flex: 1 1 0; min-width: 0; }
-  label.chk { display: inline-flex; gap: 6px; align-items: center; }
-  label.chk input { width: 20px; height: 20px; }
-  .field { display: inline-flex; gap: 6px; align-items: center; }
-  #moves { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 70px; max-height: 200px; overflow-y: auto; line-height: 1.6; font-size: 15px; }
-  #moves .n { color: var(--muted); }
-  #log { font: 12px ui-monospace, Menlo, Consolas, monospace; color: #3a342c; background: #eae2d3; border-radius: 10px; padding: 6px 8px; max-height: 110px; overflow-y: auto; white-space: pre-wrap; }
-  .muted { color: var(--muted); font-size: 13px; }
-  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 6px; text-transform: none; }
+  #movesHead { display: flex; align-items: flex-end; margin-top: 6px; }
+  #movesHead span { flex: 1; font-size: 12px; color: #7A6E60; padding: 6px 2px 2px; }
+  #send { background: #F6EBD9; border: 1px solid #D2B48C; color: #8A4B14; border-radius: 14px; font-size: 13px; padding: 3px 10px; min-height: 0; margin: 4px 0 2px; }
+  #moves { background: #fff; border: 1px solid #DDD0BA; border-radius: 10px; height: 220px; overflow-y: auto; padding: 2px; }
+  #moves .mrow { display: flex; font-size: 13px; }
+  #moves .mrow:nth-child(even) { background: #F6F3EE; }
+  #moves .num { width: 34px; text-align: right; color: var(--muted); padding: 2px 6px 2px 0; flex: none; }
+  #moves .cell { flex: 1 1 0; min-width: 0; padding: 2px 4px 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #moves .cell.last { background: #FFF3A6; }
+  #moves .san { font-weight: 700; } #moves .g { font-weight: 700; } #moves .bt { color: #9A8E7E; font-size: 85%; }
+  #moves .empty { color: #9A8E7E; padding: 4px 8px; font-size: 13px; }
+  .field { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+  .field select { flex: 1; min-width: 0; }
+  #logLabel { font-size: 12px; color: #7A6E60; padding: 6px 2px 2px; }
+  #log { font: 10px ui-monospace, Menlo, Consolas, monospace; color: #3A342C; background: #EAE2D3; border-radius: 10px; padding: 4px 8px; height: 46px; overflow-y: auto; white-space: pre-wrap; }
+  #dialog { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  #dialog .box { background: #fff; border-radius: 14px; padding: 16px; width: min(440px, 100%); max-height: 80dvh; overflow-y: auto; }
+  #dialog h3 { margin: 0 0 10px; font-size: 18px; }
+  #dialog .item { display: block; width: 100%; text-align: left; white-space: normal; margin: 6px 0; background: #fff; border-color: #E2D6C2; }
+  #dialog .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  #dialog .acts button { min-width: 100px; }
+  @media (min-width: 820px) and (min-aspect-ratio: 1/1) {
+    #app { display: grid; grid-template-columns: auto minmax(360px, 1fr); grid-template-rows: auto 1fr; }
+    header { grid-column: 1 / 3; }
+    #top { padding: 10px; }
+    #panel { padding-top: 10px; }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <script src="ajedrez.js"></script>
 <script src="maia.js"></script>
 <script src="chessnut.js"></script>
+<script src="tablero.js"></script>
+<script src="reloj.js"></script>
+<script src="motor.js"></script>
+<script src="aperturas.js"></script>
 </head>
 <body>
-<header><span class="logo">♞<b>M</b></span> Ajedrez contra Maia <span class="muted" style="color:#e8d9c4;font-weight:400;font-size:13px">· prueba web</span></header>
-<main>
-  <section>
-    <div class="board-wrap"><div id="board"></div></div>
-  </section>
-  <section style="display:grid;gap:12px">
-    <div class="card status">
-      <div><span id="nutDot" class="dot"></span><span id="nutText">Chessnut: sin conectar</span></div>
-      <div><span id="maiaDot" class="dot wait"></span><span id="maiaText">Cargando Maia...</span></div>
-      <div id="info"></div>
-    </div>
-    <div class="row">
-      <button id="btnConnect" class="primary">Conectar Chessnut</button>
-    </div>
-    <div class="row" id="gameRow">
-      <button id="btnSetup">Montar posición</button>
-      <button id="btnWhite" hidden>Empiezan blancas</button>
-      <button id="btnBlack" hidden>Empiezan negras</button>
-      <button id="btnCancel" hidden>Cancelar</button>
-      <button id="btnSend">Enviar partida</button>
-    </div>
+<div id="app">
+  <header>Ajedrez contra Maia</header>
+  <div id="top">
+    <div id="boardRow"><canvas id="bar"></canvas><canvas id="board"></canvas></div>
+    <div id="opening"></div>
+    <div id="cands"></div>
+  </div>
+  <div id="panel">
+    <canvas id="clock" title="Toca: pausa · mantén: reloj a cero"></canvas>
     <div class="card">
+      <div id="status"></div>
+      <div id="info"></div>
+      <div class="sep"></div>
       <div class="row">
-        <span class="field">Maia <select id="level"></select></span>
-        <span class="field">Juegas con <select id="color"><option value="w">Blancas</option><option value="b">Negras</option></select></span>
-        <label class="chk"><input type="checkbox" id="variety" checked> Variedad</label>
+        <label class="chk"><input type="checkbox" id="chkBar" checked> Barra</label>
+        <label class="chk" style="margin-left:10px"><input type="checkbox" id="chkMaterial" checked> Material</label>
+        <span class="field" style="margin-left:10px;flex:0 1 auto"><span class="lbl">Cand.</span><select id="candCount"></select></span>
       </div>
+      <div id="material"></div>
+      <div class="row" id="analysisRow"><span id="turn"></span><span id="depth"></span></div>
     </div>
-    <div>
-      <h2>Jugadas</h2>
-      <div id="moves"><span class="muted">Coloca la posición inicial en el tablero (o toca las piezas en la pantalla) para empezar.</span></div>
+    <div class="btns">
+      <button id="btnBack">◀ Atrás</button>
+      <button id="btnSetup">Montar</button>
+      <button id="btnDraw">Tablas</button>
+      <button id="btnResign">Rendirse</button>
     </div>
-    <div>
-      <h2>Registro</h2>
-      <div id="log"></div>
+    <div id="movesHead"><span>Jugadas</span><button id="send">✉&#xFE0E; Enviar partida</button></div>
+    <div id="moves"></div>
+    <div class="row" style="margin-top:8px">
+      <span class="field"><span class="lbl">Maia</span><select id="level"></select></span>
+      <span class="field"><span class="lbl">Juegas con</span><select id="color"><option value="w">Blancas</option><option value="b">Negras</option></select></span>
     </div>
-  </section>
-</main>
+    <div class="row" style="margin-top:4px">
+      <span class="field"><span class="lbl">Piensa</span><select id="pause"></select></span>
+      <label class="chk" style="flex:1"><input type="checkbox" id="variety" checked> Variedad</label>
+    </div>
+    <div class="btns">
+      <button id="btnFlip">Girar tablero</button>
+      <button id="btnConnect">Conectar Chessnut</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <span class="field"><span class="lbl">Reloj</span><select id="clockSel"></select></span>
+    </div>
+    <div id="logLabel">Registro</div>
+    <div id="log"></div>
+  </div>
+</div>
+<div id="dialog"><div class="box"><h3 id="dlgTitle"></h3><div id="dlgBody"></div><div class="acts" id="dlgActs"></div></div></div>
 <script src="app.js"></script>
 </body>
 </html>

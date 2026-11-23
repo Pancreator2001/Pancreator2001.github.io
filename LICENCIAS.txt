@@ -10,6 +10,19 @@ AJEDREZ CONTRA MAIA (WEB) - PROCEDENCIA Y LICENCIAS
   orden "lc0 leela2onnx" de Leela Chess Zero 0.32.1 (GPL-3.0,
   https://github.com/LeelaChessZero/lc0), sin ningun otro cambio.
 
+* Stockfish 18 (stockfish/stockfish-18-lite-single.js y .wasm): el motor
+  Stockfish (https://github.com/official-stockfish/Stockfish) compilado para
+  el navegador por Nathan Rugg (stockfish.js,
+  https://github.com/nmrugg/stockfish.js, paquete npm "stockfish" 18.0.8),
+  sin cambios. Licencia GPL-3.0 (stockfish/LICENCIA-Stockfish-GPL-3.0.txt).
+
 * ONNX Runtime Web 1.20.1 (Microsoft, licencia MIT), que hace funcionar la
-  red en el navegador; la pagina lo carga de cdn.jsdelivr.net.
+  red Maia en el navegador; la pagina lo carga de cdn.jsdelivr.net.
   https://github.com/microsoft/onnxruntime
+
+* Las piezas Staunton dibujadas (tablero.js): el juego clasico de Colin M. L.
+  Burnett (Wikimedia Commons; el de Lichess), licencias GPL / BSD / GFDL.
+
+* La lista de aperturas (recursos/aperturas.tsv.gz): la de Lichess
+  (https://github.com/lichess-org/chess-openings), dominio publico (CC0),
+  con los nombres traducidos al espanol.
