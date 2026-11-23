@@ -93,7 +93,9 @@ class Chessnut {
     await this.open();
   }
 
-  /** Una orden al tablero: el Chessnut pierde las que llegan a menos de 200 ms de la anterior. */
+  /** Una orden al tablero: el Chessnut pierde las que llegan a menos de 200 ms de la anterior. Si una escritura
+   *  no se confirma en 2 s se sigue con las demás (24/11: en el iPhone dejaron de encenderse las jugadas de Maia;
+   *  una escritura sin respuesta habría parado la cola para siempre). */
   send(bytes) {
     const data = new Uint8Array(bytes);
     this.queue = this.queue.then(async () => {
@@ -103,24 +105,31 @@ class Chessnut {
       if (wait > 0) await new Promise(r => setTimeout(r, wait));
       this.lastWrite = performance.now();
       try {
-        if (w.properties.write && w.writeValueWithResponse) await w.writeValueWithResponse(data);
-        else if (w.writeValueWithoutResponse) await w.writeValueWithoutResponse(data);
-        else await w.writeValue(data);
+        let p;
+        if (w.properties.write && w.writeValueWithResponse) p = w.writeValueWithResponse(data);
+        else if (w.writeValueWithoutResponse) p = w.writeValueWithoutResponse(data);
+        else p = w.writeValue(data);
+        const r = await Promise.race([Promise.resolve(p).then(() => 'ok'), new Promise(res => setTimeout(() => res('tarde'), 2000))]);
+        if (r === 'tarde') {
+          this.unanswered = (this.unanswered || 0) + 1;
+          if (this.unanswered <= 5 || this.unanswered % 20 === 0) this.log('Chessnut: no confirma una orden (' + Array.from(data.slice(0, 3)).map(x => x.toString(16).padStart(2, '0')).join(' ') + '...) en 2 s; sigo con las demás (' + this.unanswered + ').');
+        }
       } catch (e) { this.log('Chessnut: no se pudo enviar (' + e.message + ')'); }
     });
     return this.queue;
   }
 
-  /** Enciende las casillas de lit (64 valores, a1 = 0); repite el dibujo una vez, como el puente. */
-  leds(lit) {
+  /** Enciende las casillas de lit (64 valores, a1 = 0); repite el dibujo una vez, como el puente. force: lo manda
+   *  aunque sea el mismo (para refrescar las luces de una jugada que espera). */
+  leds(lit, force) {
     this.wantLeds = lit.slice();
     const cmd = [0x0A, 0x08, 0, 0, 0, 0, 0, 0, 0, 0];
     for (let s = 0; s < 64; s++) if (lit[s]) { const r = 7 - (s >> 3), f = s & 7; cmd[2 + r] |= 0x80 >> f; }
     const key = cmd.join(',');
-    if (key === this.sentLeds) return;
+    if (key === this.sentLeds && !force) return;
     this.sentLeds = key;
     this.send(cmd);
-    setTimeout(() => { if (this.sentLeds === key) this.send(cmd); }, 600);
+    if (!force) setTimeout(() => { if (this.sentLeds === key) this.send(cmd); }, 600);
   }
 
   message(m) {

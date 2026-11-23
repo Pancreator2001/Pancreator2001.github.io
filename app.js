@@ -119,10 +119,17 @@ function maiaLit() {
   }
   return lit;
 }
-function refreshLeds() {
+let lastLedLog = '';
+function refreshLeds(force) {
   if (!connected()) return;
-  nut.leds(undoLit() || maiaLit() || S.lifted);
+  const lit = undoLit() || maiaLit();
+  // en el registro, las luces de Maia y de Atrás (como Android: "LEDs: e7,e5"); las de la pieza en la mano, no
+  const names = lit ? lit.map((x, i) => x ? sqName(i) : null).filter(x => x).join(',') : '';
+  if (names !== lastLedLog) { lastLedLog = names; log('LEDs: ' + (names || '-')); }
+  nut.leds(lit || S.lifted, force);
 }
+// mientras una jugada de Maia (o Atrás) espera encendida, se vuelve a mandar cada 3 s por si el tablero perdió la orden
+setInterval(() => { if (connected() && (S.maiaMove || S.undo)) refreshLeds(true); }, 3000);
 function updateLift(b) {
   const lit = new Array(64).fill(false);
   let only = S.liftRef !== null;
