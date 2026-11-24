@@ -3,7 +3,7 @@
 Juega en un tablero **Chessnut Air** contra **Maia**, que juega como la gente de 1100 a 1900 de Lichess, errores incluidos. Funciona en el navegador, también en el iPhone con Bluefy (App Store: «Bluefy – Web BLE Browser»), que deja a las páginas usar el Bluetooth. La pantalla es la de la app de Android «Ajedrez contra Maia».
 
 - La jugada de Maia se enciende en los LEDs del tablero; hazla en el tablero y te toca. La pieza que coges también se enciende.
-- **◀ Atrás**: tu última jugada y la de Maia; se encienden las casillas que cambian. Las tomas atrás también se hacen directamente en el tablero.
+- **◀ Atrás**: tu última jugada y la de Maia. La pantalla muestra en el acto la posición de antes (las jugadas deshechas, tachadas) y debajo salen los pasos para colocar el Chessnut igual, uno a uno y la última jugada primero («Lleva el caballo negro de d5 a f6 y pon un peón negro en d5»); el que toca lleva una flecha y en el Chessnut se encienden las casillas que aún están mal. Las tomas atrás también se hacen directamente en el tablero.
 - **Montar**: coloca las piezas y elige quién empieza.
 - **Tablas** (Maia las acepta si no va mejor) y **Rendirse**.
 - **▶ Juega Maia**: si Maia no contesta, la obliga a mover (o juega desde la posición que haya en el tablero). **Nueva partida**: limpia la partida.

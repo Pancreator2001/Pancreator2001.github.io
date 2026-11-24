@@ -466,8 +466,10 @@ function back() {
     S.undoPaused = c.started && !c.paused && !c.ended && c.flag < 0;
     if (S.undoPaused) clock.togglePause();
   }
-  S.undo = { k };
-  log('Atrás: deshaz en el tablero ' + undone + ' (se encienden las casillas que cambian). Cuando el tablero lo muestre, ' + (maiaNext ? 'jugará Maia.' : 'te tocará a ti.'));
+  // (24/11, pedido por el usuario) la posición de antes en la pantalla en el acto, y los pasos para colocar el
+  // tablero igual, uno a uno, el que toca con una flecha
+  S.undo = { k, order: Restore.order(p, k), plan: null, arrow: null };
+  log('Atrás: la pantalla ya muestra la posición de antes de ' + undone + '. Coloca el tablero igual, siguiendo los pasos (se encienden las casillas que cambian). Cuando el tablero lo muestre, ' + (maiaNext ? 'jugará Maia.' : 'te tocará a ti.'));
   checkUndo();
 }
 
@@ -475,7 +477,11 @@ function checkUndo() {
   const lit = undoLit();
   const diff = lit ? lit.filter(x => x).length : 0;
   if (diff > 0) {
-    setInfo('Atrás: devuelve las piezas de las ' + diff + ' casillas encendidas', 'go');
+    const u = S.undo, t = S.partida.positions[u.k].b, b = normalize(S.physical);
+    if (!u.plan || !Restore.fits(u.plan, b, t)) u.plan = Restore.steps(b, t, u.order);
+    const d = Restore.describe(u.plan, b, t);
+    u.arrow = d.arrow;
+    setInfo('Atrás: coloca las piezas como en la pantalla:\n' + d.text, 'go');
     refreshLeds(); scheduleRender(); return;
   }
   const k = S.undo.k, p = S.partida;
@@ -689,13 +695,16 @@ function scheduleRender() {
 
 function render() {
   const p = S.partida, pos = p.pos, fen = pos.fen();
-  const shown = connected() && S.physical ? S.physical : pos.b;
-  // la última jugada con su nota
+  // «Atrás»: la posición a la que se vuelve, en la pantalla en el acto (el Chessnut se coloca igual)
+  const backTo = S.undo ? p.positions[S.undo.k].b : null;
+  const shown = backTo || (connected() && S.physical ? S.physical : pos.b);
+  // la última jugada con su nota (volviendo atrás: la última que queda)
   const graded = analysisOn();
   let last = null;
-  if (p.moves.length) {
-    const lm = p.moves[p.moves.length - 1];
-    last = { from: sqIndex(lm.uci.slice(0, 2)), to: sqIndex(lm.uci.slice(2, 4)), label: graded ? revision.grade(p, p.moves.length - 1).label : '' };
+  const li = backTo ? S.undo.k - 1 : p.moves.length - 1;
+  if (li >= 0) {
+    const lm = p.moves[li];
+    last = { from: sqIndex(lm.uci.slice(0, 2)), to: sqIndex(lm.uci.slice(2, 4)), label: graded ? revision.grade(p, li).label : '' };
   }
   // análisis
   const v = S.view && S.view.fen === fen ? S.view : null;
@@ -732,8 +741,9 @@ function render() {
   }
   // tablero y barra
   geo = drawBoard($('board'), {
-    board: shown, flipped: S.flipped, lit: undoLit() || S.illegal || maiaLit(), move: S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : null,
-    cands: S.candCount > 0 ? cands : null, last, sel: S.sel,
+    board: shown, flipped: S.flipped, lit: undoLit() || S.illegal || maiaLit(),
+    move: backTo ? S.undo.arrow : S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : null,
+    cands: S.candCount > 0 && !backTo ? cands : null, last, sel: S.sel,
   });
   $('bar').style.display = S.barOn ? '' : 'none';
   bar.set(S.lastShare, S.lastScore, S.flipped, S.barOn && (!!v || !legal.length));
@@ -794,7 +804,8 @@ let shownMovesKey = '';
 function renderMoves(graded) {
   const p = S.partida;
   const grades = graded ? p.moves.map((_, i) => revision.grade(p, i)) : [];
-  const key = p.moves.map(m => m.uci).join(' ') + '|' + grades.map(g => g.label + g.better).join(',') + '|' + graded + '|' + S.over;
+  const gone = S.undo ? S.undo.k : -1;            // «Atrás»: las jugadas que se deshacen, tachadas
+  const key = p.moves.map(m => m.uci).join(' ') + '|' + grades.map(g => g.label + g.better).join(',') + '|' + graded + '|' + S.over + '|' + gone;
   if (key === shownMovesKey) return;
   shownMovesKey = key;
   const box = $('moves');
@@ -804,14 +815,15 @@ function renderMoves(graded) {
   }
   let h = '', open = false;
   p.moves.forEach((m, i) => {
-    const lastOne = i === p.moves.length - 1;
+    const isGone = gone >= 0 && i >= gone;
+    const lastOne = gone >= 0 ? i === gone - 1 : i === p.moves.length - 1;
     let cell = '<span class="san">' + esc(m.san) + '</span>';
-    const g = grades[i];
+    const g = isGone ? null : grades[i];
     if (g && g.label) {
       cell += '   <span class="g" style="color:' + GRADE[g.label].color + '">' + GRADE[g.label].sym + ' ' + gradeText(g.label) + '</span>';
       if (g.better) cell += '<span class="bt">  (mejor ' + esc(g.better) + ')</span>';
     } else if (lastOne && graded) cell += '<span class="bt">   …</span>';
-    const td = '<div class="cell' + (lastOne ? ' last' : '') + '">' + cell + '</div>';
+    const td = '<div class="cell' + (lastOne ? ' last' : '') + (isGone ? ' gone' : '') + '">' + cell + '</div>';
     if (m.white || !open) {
       if (open) h += '</div>';
       h += '<div class="mrow"><div class="num">' + m.number + '.</div>' + (m.white ? td : '<div class="cell">…</div>' + td);

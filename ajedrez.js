@@ -424,4 +424,137 @@ class Partida {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { Pos, Partida, sqName, sqIndex, isWhite, START_FEN };
+/**
+ * «Atrás» (pedido por el usuario el 24/11): los pasos para dejar el tablero como estaba, uno a uno - «Lleva el
+ * caballo negro de d5 a f6 y pon un peón negro en d5» -, la última jugada primero. Salen del tablero tal como está y
+ * de la posición buscada, así que valen hagas lo que hagas y en el orden que sea. (Como Restore.java de Android;
+ * aquí a1 = 0.)
+ */
+const Restore = (() => {
+  const LATE = 1000, SHOWN = 6;
+  const NAME = { K: 'rey', Q: 'dama', R: 'torre', B: 'alfil', N: 'caballo', P: 'peón' };
+  const fem = p => 'QR'.includes(p.toUpperCase());
+  const colour = p => isWhite(p) ? (fem(p) ? 'blanca' : 'blanco') : (fem(p) ? 'negra' : 'negro');
+  const the = p => (fem(p) ? 'la ' : 'el ') + NAME[p.toUpperCase()] + ' ' + colour(p);
+  const a = p => (fem(p) ? 'una ' : 'un ') + NAME[p.toUpperCase()] + ' ' + colour(p);
+  const distance = (x, y) => { const dr = Math.abs((x >> 3) - (y >> 3)), df = Math.abs((x & 7) - (y & 7)); return Math.max(dr, df) * 16 + dr + df; };
+
+  function squares(st) {
+    const s = [];
+    if (st.from >= 0) s.push(st.from);
+    if (st.to >= 0) s.push(st.to);
+    if (st.put >= 0 && st.put !== st.from) s.push(st.put);
+    return s;
+  }
+  /** Hecho en este tablero: la pieza está donde va y se ha ido de donde estaba. */
+  function done(st, b, t) {
+    if (st.to >= 0 && b[st.to] !== t[st.to]) return false;
+    if (st.put >= 0 && b[st.put] !== t[st.put]) return false;
+    if (st.from >= 0 && st.put < 0 && b[st.from] !== '.' && b[st.from] !== t[st.from]) return false;
+    return true;
+  }
+  /** Las casillas que cambió cada jugada que se deshace: las de la última 0, las de la anterior 1... */
+  function order(partida, keep) {
+    const o = new Array(64).fill(LATE);
+    for (let i = partida.moves.length - 1, k = 0; i >= keep && i >= 0; i--, k++) {
+      const b = partida.positions[i].b, af = partida.positions[i + 1].b;
+      for (let s = 0; s < 64; s++) if (b[s] !== af[s] && o[s] === LATE) o[s] = k;
+    }
+    return o;
+  }
+  function text(st) {
+    const parts = [];
+    if (st.aside !== '.') parts.push('aparta ' + the(st.aside) + ' de ' + sqName(st.to) + ' (' + (fem(st.aside) ? 'tenla' : 'tenlo') + ' a mano)');
+    let putDone = false;
+    if (st.from >= 0 && st.to >= 0 && st.piece === st.toPiece) parts.push('lleva ' + the(st.piece) + ' de ' + sqName(st.from) + ' a ' + sqName(st.to));
+    else if (st.from >= 0 && st.to >= 0) { parts.push('quita ' + the(st.piece) + ' de ' + sqName(st.from)); parts.push('pon ' + a(st.toPiece) + ' en ' + sqName(st.to)); }
+    else if (st.from >= 0 && st.put >= 0) { parts.push('cambia ' + the(st.piece) + ' de ' + sqName(st.from) + ' por ' + a(st.putPiece)); putDone = true; }
+    else if (st.from >= 0) parts.push('quita ' + the(st.piece) + ' de ' + sqName(st.from));
+    else parts.push('pon ' + a(st.toPiece) + ' en ' + sqName(st.to));
+    if (st.put >= 0 && !putDone) parts.push('pon ' + a(st.putPiece) + ' en ' + sqName(st.put));
+    let t = '';
+    parts.forEach((x, i) => { t += (i === 0 ? '' : i === parts.length - 1 ? ' y ' : ', ') + x; });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  /** Los pasos de board a target, en un orden que se puede seguir (la casilla de cada uno libre cuando toca). */
+  function steps(board, target, ord) {
+    const extra = [], need = [];
+    for (let s = 0; s < 64; s++) {
+      if (board[s] === target[s]) continue;
+      if (board[s] !== '.') extra.push(s);          // una pieza que tiene que irse
+      if (target[s] !== '.') need.push(s);          // una pieza que tiene que venir
+    }
+    const mk = o => Object.assign({ from: -1, to: -1, piece: '.', toPiece: '.', put: -1, putPiece: '.', aside: '.', order: LATE, text: '' }, o);
+    const list = [];
+    // la misma pieza de donde está a donde estaba, la pareja más cercana primero
+    for (;;) {
+      let bi = -1, bj = -1, best = Infinity;
+      extra.forEach((x, i) => need.forEach((y, j) => {
+        if (board[x] !== target[y]) return;
+        const d = distance(x, y);
+        if (d < best) { best = d; bi = i; bj = j; }
+      }));
+      if (bi < 0) break;
+      const from = extra.splice(bi, 1)[0], to = need.splice(bj, 1)[0];
+      list.push(mk({ from, to, piece: board[from], toPiece: board[from] }));
+    }
+    // una coronación deshecha: la pieza nueva fuera de la última fila, el peón otra vez en la casilla de antes
+    for (let i = 0; i < extra.length; i++) {
+      const x = extra[i], p = board[x];
+      if ('PpKk'.includes(p)) continue;
+      const w = isWhite(p);
+      if ((x >> 3) !== (w ? 7 : 0)) continue;
+      const j = need.findIndex(y => target[y] === (w ? 'P' : 'p') && (y >> 3) === (w ? 6 : 1) && Math.abs((y & 7) - (x & 7)) <= 1);
+      if (j < 0) continue;
+      list.push(mk({ from: x, to: need[j], piece: p, toPiece: target[need[j]] }));
+      extra.splice(i--, 1);
+      need.splice(j, 1);
+    }
+    extra.forEach(x => list.push(mk({ from: x, piece: board[x] })));            // piezas fuera
+    need.forEach(y => {                                                       // piezas que vuelven: donde se va una, en el mismo paso
+      const host = list.find(st => st.from === y && st.put < 0);
+      if (host) { host.put = y; host.putPiece = target[y]; } else list.push(mk({ to: y, toPiece: target[y] }));
+    });
+    list.forEach((st, i) => { st.i = i; squares(st).forEach(s => { st.order = Math.min(st.order, ord ? ord[s] : LATE); }); });
+    list.sort((x, y) => x.order - y.order || x.i - y.i);
+    // en ese orden, cada paso cuando su casilla está libre
+    const out = [], left = list.slice(), sim = board.slice();
+    while (left.length) {
+      let pick = left.find(st => st.to < 0 || sim[st.to] === '.');
+      if (!pick) {                                 // piezas que se cambian el sitio: primero se aparta la que estorba
+        pick = left[0];
+        pick.aside = sim[pick.to];
+        left.forEach(st => { if (st !== pick && st.from === pick.to) { st.from = -1; st.piece = '.'; } });
+      }
+      if (pick.from >= 0) sim[pick.from] = '.';
+      if (pick.to >= 0) sim[pick.to] = pick.toPiece;
+      if (pick.put >= 0) sim[pick.put] = pick.putPiece;
+      out.push(pick);
+      left.splice(left.indexOf(pick), 1);
+    }
+    out.forEach(st => { st.text = text(st); });
+    return out;
+  }
+  /** El plan sigue valiendo: cada casilla distinta es de un paso aún sin hacer. */
+  function fits(plan, b, t) {
+    const covered = new Array(64).fill(false);
+    plan.forEach(st => { if (!done(st, b, t)) squares(st).forEach(s => { covered[s] = true; }); });
+    for (let s = 0; s < 64; s++) if (b[s] !== t[s] && !covered[s]) return false;
+    return true;
+  }
+  /** Los pasos en líneas («✓ 1.» hecho, «→ 2.» el que toca) y la flecha del que toca ([de, a] o null). */
+  function describe(plan, b, t) {
+    const n = plan.length, dn = plan.map(st => done(st, b, t)), cur = dn.indexOf(false);
+    const arrow = cur >= 0 && plan[cur].from >= 0 && plan[cur].to >= 0 ? [plan[cur].from, plan[cur].to] : null;
+    const start = n <= SHOWN + 1 ? 0 : Math.max(0, Math.min(cur - 1, n - SHOWN));
+    const end = n <= SHOWN + 1 ? n : Math.min(n, start + SHOWN);
+    const lines = [];
+    if (start > 0) lines.push(start === 1 ? '✓ paso 1 hecho' : '✓ pasos 1–' + start + ' hechos');
+    for (let i = start; i < end; i++) lines.push((dn[i] ? '✓ ' : i === cur ? '→ ' : '    ') + (i + 1) + '. ' + plan[i].text);
+    if (end < n) lines.push('    … y ' + (n - end) + (n - end === 1 ? ' paso más' : ' pasos más'));
+    return { text: lines.join('\n'), arrow };
+  }
+  return { order, steps, fits, describe, done };
+})();
+
+if (typeof module !== 'undefined') module.exports = { Pos, Partida, sqName, sqIndex, isWhite, START_FEN, Restore };
