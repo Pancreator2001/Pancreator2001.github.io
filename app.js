@@ -831,12 +831,12 @@ function layout() {
   const vh = window.innerHeight, vw = document.documentElement.clientWidth;
   const head = document.querySelector('header').offsetHeight;
   const candsH = S.candCount > 0 ? Math.ceil(S.candCount / 2) * 21 : 0;
-  const barW = S.barOn ? 36 : 0;
+  const barW = S.barOn ? 52 : 0;                          // la barra, 46 px (24/11: más ancha para leer la cifra)
   let bs = big ? Math.min(vh - head - 30 - 34 - candsH, vw * 0.6 - barW - 20) : Math.min(vw - 16 - barW, vh - head - 14 - 34 - candsH - 150);
   bs = Math.max(220, Math.floor(bs));
   document.documentElement.style.setProperty('--bs', bs + 'px');
   $('bar').style.height = bs + 'px';
-  $('bar').style.width = '30px';
+  $('bar').style.width = '46px';
   scheduleRender();
   setTimeout(() => { bar.draw(); scheduleRender(); }, 50);
 }
