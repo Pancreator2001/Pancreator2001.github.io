@@ -17,7 +17,7 @@ const S = {
   barOn: true, materialOn: true, candCount: 5, clockCtl: ChessClock.USED, flipped: false,
   maiaMove: null, thinking: false, thinkId: 0, settingUp: false, over: null, result: null,
   physical: null, sel: -1, liftRef: null, lifted: new Array(64).fill(false),
-  info: '', infoClass: '', undo: null, undoPaused: false,
+  info: '', infoClass: '', undo: null, undoPaused: false, illegal: null,
   maiaState: 'loading', maiaError: '', view: null, lastShare: 0.5, lastScore: '', analyzedKey: '',
 };
 
@@ -122,14 +122,14 @@ function maiaLit() {
 let lastLedLog = '';
 function refreshLeds(force) {
   if (!connected()) return;
-  const lit = undoLit() || maiaLit();
+  const lit = undoLit() || S.illegal || maiaLit();
   // en el registro, las luces de Maia y de Atrás (como Android: "LEDs: e7,e5"); las de la pieza en la mano, no
   const names = lit ? lit.map((x, i) => x ? sqName(i) : null).filter(x => x).join(',') : '';
   if (names !== lastLedLog) { lastLedLog = names; log('LEDs: ' + (names || '-')); }
   nut.leds(lit || S.lifted, force);
 }
 // mientras una jugada de Maia (o Atrás) espera encendida, se vuelve a mandar cada 3 s por si el tablero perdió la orden
-setInterval(() => { if (connected() && (S.maiaMove || S.undo)) refreshLeds(true); }, 3000);
+setInterval(() => { if (connected() && (S.maiaMove || S.undo || S.illegal)) refreshLeds(true); }, 3000);
 function updateLift(b) {
   const lit = new Array(64).fill(false);
   let only = S.liftRef !== null;
@@ -293,10 +293,33 @@ async function maiaTurn() {
   scheduleRender();
 }
 
+/** Una jugada ilegal en el tablero: por qué, y sus casillas encendidas para devolver las piezas (las que difieren de ref). */
+function showIllegal(why, ref, nb) {
+  S.illegal = ref.map((c, i) => c !== nb[i]);
+  const t = 'Jugada ilegal: ' + why;
+  if (S.info !== t) log(t + ' Devuelve las piezas de las casillas encendidas.');
+  setInfo(t, 'bad');
+}
+
+/** El enroque empezado por la torre (24/11: Tf1 se tomaba como una jugada suelta, Maia contestaba y luego el rey ya
+ *  no encajaba): si el tablero es el enroque desde la posición de antes de esa torre, {move} (legal) o {why}. */
+function rookFirstCastle(nb) {
+  const p = S.partida, n = p.moves.length;
+  if (!n) return null;
+  const last = p.moves[n - 1], before = p.positions[n - 1];
+  if (last.white !== S.humanWhite) return null;
+  const side = { h1f1: 'K', a1d1: 'Q', h8f8: 'K', a8d8: 'Q' }[last.uci];
+  const cb = side ? before.castleBoard(side) : null;
+  if (!cb || !same(cb, nb)) return null;
+  const move = before.legal().find(x => before.b[x.from].toLowerCase() === 'k' && Math.abs(x.to - x.from) === 2 && (side === 'K') === (x.to > x.from));
+  return { move: move || null, why: move ? null : before.illegalReason(nb), before };
+}
+
 /** Una posición nueva y quieta en el tablero. */
 function onPhysical(b) {
   S.physical = b;
   updateLift(b);
+  S.illegal = null;
   if (S.settingUp) { refreshLeds(); scheduleRender(); return; }
   if (S.undo) { checkUndo(); return; }
   const nb = normalize(b), p = S.partida;
@@ -304,22 +327,116 @@ function onPhysical(b) {
   if (S.maiaMove && same(nb, S.maiaMove.after.b)) { makeMaia(); return; }
   if (same(nb, p.pos.b)) {
     if (S.maiaMove) setInfo('Maia juega: ' + S.maiaMove.text, 'go');
-    else if (!S.over && !S.thinking) setInfo(p.pos.white === S.humanWhite ? 'Te toca' : 'Maia piensa...');
+    else if (!S.over && !S.thinking) {
+      if (p.pos.white === S.humanWhite) setInfo('Te toca');
+      else maiaTurn();                                    // le toca a Maia y no estaba pensando: que juegue
+    }
     refreshLeds(); scheduleRender(); return;
   }
   for (let k = p.positions.length - 2; k >= Math.max(0, p.positions.length - 5); k--)
     if (same(nb, p.positions[k].b)) { takeBack(k); return; }
   if (!S.over) {
-    const m = p.pos.legal().find(x => same(p.pos.play(x).b, nb));
-    if (m && !S.maiaMove && p.pos.white === S.humanWhite) { userMove(m); return; }
+    const rf = rookFirstCastle(nb);
+    if (rf && rf.move) {
+      cancelThinking();
+      S.maiaMove = null;
+      p.undo();
+      log('Enroque en dos tiempos (primero la torre): cuenta como enroque.');
+      userMove(rf.move);
+      return;
+    }
+    if (rf && rf.why) {
+      cancelThinking();
+      S.maiaMove = null;
+      showIllegal(rf.why, rf.before.b, nb);
+      refreshLeds(); scheduleRender(); return;
+    }
+    const pos = p.pos, mine = pos.white === S.humanWhite && !S.maiaMove;
+    const m = pos.legal().find(x => same(pos.play(x).b, nb));
+    if (m && mine) { userMove(m); return; }
     if (m && S.maiaMove) {
-      const w = 'Esa no es la jugada de Maia: has hecho ' + p.pos.san(m) + ' y Maia juega ' + S.maiaMove.text + '. Deshaz la tuya y haz la de Maia (sigue encendida).';
+      const w = 'Esa no es la jugada de Maia: has hecho ' + pos.san(m) + ' y Maia juega ' + S.maiaMove.text + '. Deshaz la tuya y haz la de Maia (sigue encendida).';
       if (S.info !== 'Esa no es la jugada de Maia: haz ' + S.maiaMove.text) log(w);
       setInfo('Esa no es la jugada de Maia: haz ' + S.maiaMove.text, 'bad');
-    } else if (!S.lifted.some(x => x)) setInfo(S.maiaMove ? 'Maia juega: ' + S.maiaMove.text : 'El tablero no coincide con la partida (coloca la posición inicial o usa «Montar»)', S.maiaMove ? 'go' : 'amber');
+    } else {
+      const why = mine ? pos.illegalReason(nb) : null;
+      const half = mine && !why ? pos.halfCastle(nb) : null;
+      if (why) showIllegal(why, pos.b, nb);
+      else if (half) {
+        const cb = pos.castleBoard(half), ok = cb && pos.legal().some(x => same(pos.play(x).b, cb));
+        const hw = cb && !ok ? pos.illegalReason(cb) : null;
+        if (hw) showIllegal(hw, pos.b, nb);
+        else setInfo('Enroque: mueve ahora la torre', 'go');
+      } else if (!S.lifted.some(x => x)) setInfo(S.maiaMove ? 'Maia juega: ' + S.maiaMove.text : 'El tablero no coincide con la partida (coloca la posición inicial, usa «Montar» o pulsa «Juega Maia»)', S.maiaMove ? 'go' : 'amber');
+    }
   }
   refreshLeds();
   scheduleRender();
+}
+
+// ---- ▶ Juega Maia: obligarla a mover (24/11: "a veces Maia no contesta al movimiento")
+
+function forceMaia() {
+  if (S.settingUp) { log('Estás montando una posición: pulsa quién empieza (Blancas o Negras) o Cancelar.'); return; }
+  if (S.undo) { log('Estás volviendo atrás: devuelve las piezas o pulsa Cancelar.'); return; }
+  const p = S.partida;
+  if (S.maiaMove) { log('Maia ya ha jugado ' + S.maiaMove.text + ': hazla en el tablero (está encendida).'); refreshLeds(true); return; }
+  const nb = connected() && S.physical ? normalize(S.physical) : null;
+  if (nb && !S.over && !same(nb, p.pos.b)) {
+    // tu jugada en el tablero que no se había tomado (o un enroque empezado por la torre): se toma ahora
+    const rf = rookFirstCastle(nb);
+    if (rf && rf.move) { cancelThinking(); p.undo(); userMove(rf.move); return; }
+    const m = p.pos.legal().find(x => same(p.pos.play(x).b, nb));
+    if (m && p.pos.white === S.humanWhite) { userMove(m); return; }
+    const why = (rf && rf.why) || (p.pos.white === S.humanWhite ? p.pos.illegalReason(nb) : null);
+    if (why) { log('Maia no puede jugar: tu jugada no es legal. ' + why); setInfo('Jugada ilegal: ' + why, 'bad'); scheduleRender(); return; }
+  }
+  // le toca a Maia en la partida: vuelve a pensar
+  if (!S.over && (!nb || same(nb, p.pos.b)) && p.pos.white !== S.humanWhite) {
+    cancelThinking();
+    log('Juega Maia: vuelve a pensar su jugada.');
+    maiaTurn();
+    return;
+  }
+  // si no: Maia juega desde la posición del tablero (o la de la pantalla), con su color
+  const b = nb || p.pos.b.slice();
+  const pos = new Pos();
+  pos.b = b.slice();
+  pos.white = !S.humanWhite;
+  pos.castle = { K: true, Q: true, k: true, q: true };
+  pos.fixCastling();
+  const maiaSide = pos.white ? 'blancas' : 'negras';
+  if (b.filter(c => c === 'K').length !== 1 || b.filter(c => c === 'k').length !== 1) { log('Maia no puede jugar desde el tablero: tiene que haber un rey blanco y uno negro.'); return; }
+  if (pos.inCheck(!pos.white)) { log('Maia no puede jugar desde el tablero: tu rey está en jaque y no te toca.'); return; }
+  if (!pos.legal().length) { log('Maia no tiene ninguna jugada en esa posición (' + (pos.inCheck() ? 'jaque mate' : 'ahogado') + ').'); return; }
+  const go = () => {
+    cancelThinking();
+    S.partida = new Partida(pos);
+    S.over = null; S.result = null; S.maiaMove = null; S.illegal = null;
+    if (clock.snapshot().ended) clock.resume();
+    log('Juega Maia con las ' + maiaSide + ' desde la posición del tablero (la lista de jugadas empieza aquí).');
+    afterChange();
+  };
+  const sameAsGame = same(b, p.pos.b);
+  const text = S.over ? 'La partida ha terminado. ¿Juega Maia con las ' + maiaSide + ' desde la posición del tablero? Se sigue jugando desde aquí.'
+    : sameAsGame ? 'Te toca a ti. ¿Quieres que Maia juegue ahora con las ' + maiaSide + '? Se sigue jugando desde esta posición.'
+    : 'El tablero no sigue la partida. ¿Juega Maia con las ' + maiaSide + ' desde la posición del tablero? Se sigue jugando desde aquí.';
+  dialog('Juega Maia', '<p>' + esc(text) + '</p>', [{ label: 'No' }, { label: 'Sí, que juegue', primary: true, fn: go }]);
+}
+
+// ---- Nueva partida: limpia la partida (terminada o no) y espera la posición inicial
+
+function newGameButton() {
+  const doIt = () => {
+    if (S.undo) endUndo();
+    S.settingUp = false;
+    S.illegal = null;
+    newGame();
+    if (connected() && S.physical && !same(normalize(S.physical), START.b)) setInfo('Partida nueva: coloca las piezas en la posición inicial', 'amber');
+    scheduleRender();
+  };
+  if (playing()) dialog('Nueva partida', '<p>¿Empezar una partida nueva? La de ahora no ha terminado y no se guarda.</p>', [{ label: 'Seguir con esta' }, { label: 'Nueva partida', primary: true, fn: doIt }]);
+  else doIt();
 }
 
 // ---- ◀ Atrás: tu última jugada y la de Maia; las casillas que cambian se encienden hasta que el tablero lo muestra
@@ -615,7 +732,7 @@ function render() {
   }
   // tablero y barra
   geo = drawBoard($('board'), {
-    board: shown, flipped: S.flipped, lit: undoLit() || maiaLit(), move: S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : null,
+    board: shown, flipped: S.flipped, lit: undoLit() || S.illegal || maiaLit(), move: S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : null,
     cands: S.candCount > 0 ? cands : null, last, sel: S.sel,
   });
   $('bar').style.display = S.barOn ? '' : 'none';
@@ -667,6 +784,7 @@ function render() {
   $('btnSetup').textContent = setting ? (w2 ? 'Empiezan negras' : 'Negras') : w2 ? 'Montar posición' : 'Montar';
   $('btnDraw').textContent = setting || undoing ? 'Cancelar' : w2 ? 'Ofrecer tablas' : 'Tablas';
   $('btnResign').disabled = setting;
+  $('btnForce').disabled = setting || undoing;
   $('btnConnect').textContent = connected() ? 'Chessnut conectado' : nut.device ? 'Reconectar Chessnut' : 'Conectar Chessnut';
   $('btnConnect').disabled = connected();
   renderMoves(graded);
@@ -775,6 +893,8 @@ $('btnBack').onclick = () => { if (S.settingUp) startFrom(true); else back(); };
 $('btnSetup').onclick = () => { if (S.settingUp) startFrom(false); else startSetUp(); };
 $('btnDraw').onclick = () => { if (S.settingUp) cancelSetUp(); else if (S.undo) cancelBack(); else offerDraw(); };
 $('btnResign').onclick = resign;
+$('btnForce').onclick = forceMaia;
+$('btnNew').onclick = newGameButton;
 $('btnFlip').onclick = flip;
 $('send').onclick = sendGame;
 $('btnConnect').onclick = async () => {

@@ -6,6 +6,8 @@ Juega en un tablero **Chessnut Air** contra **Maia**, que juega como la gente de
 - **◀ Atrás**: tu última jugada y la de Maia; se encienden las casillas que cambian. Las tomas atrás también se hacen directamente en el tablero.
 - **Montar**: coloca las piezas y elige quién empieza.
 - **Tablas** (Maia las acepta si no va mejor) y **Rendirse**.
+- **▶ Juega Maia**: si Maia no contesta, la obliga a mover (o juega desde la posición que haya en el tablero). **Nueva partida**: limpia la partida.
+- Las jugadas ilegales se explican (por ejemplo, un enroque pasando por una casilla atacada) y se encienden sus casillas para devolver las piezas. El enroque vale empezando por el rey o por la torre.
 - Análisis de **Stockfish 18**: barra de evaluación, de 0 a 5 jugadas candidatas y la nota de cada jugada (Mejor, Excelente, Buena, Imprecisión, Error, Error grave).
 - Reloj (tiempo usado o partida con tiempo), material, apertura.
 - **Enviar partida**: el PGN, con el menú de compartir. Las partidas terminadas se guardan en el navegador.

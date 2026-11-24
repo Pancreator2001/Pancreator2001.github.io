@@ -132,6 +132,86 @@ class Pos {
     return k >= 0 && this.attacked(k, !white);
   }
 
+  /** Las casillas de las piezas del bando byWhite que atacan sq. */
+  attackers(sq, byWhite) {
+    const out = [], b = this.b, r = sq >> 3, f = sq & 7;
+    const at = (rr, ff) => rr >= 0 && rr < 8 && ff >= 0 && ff < 8 ? rr * 8 + ff : -1;
+    const pr = byWhite ? r - 1 : r + 1, pawn = byWhite ? 'P' : 'p';
+    for (const df of [-1, 1]) { const s = at(pr, f + df); if (s >= 0 && b[s] === pawn) out.push(s); }
+    for (const [dr, df] of KNIGHT) { const s = at(r + dr, f + df); if (s >= 0 && b[s] === (byWhite ? 'N' : 'n')) out.push(s); }
+    for (const [dr, df] of KING) { const s = at(r + dr, f + df); if (s >= 0 && b[s] === (byWhite ? 'K' : 'k')) out.push(s); }
+    const Q = byWhite ? 'Q' : 'q';
+    const slide = (dirs, piece) => {
+      for (const [dr, df] of dirs) {
+        let rr = r + dr, ff = f + df;
+        while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+          const s = rr * 8 + ff, p = b[s];
+          if (p !== '.') { if (p === piece || p === Q) out.push(s); break; }
+          rr += dr; ff += df;
+        }
+      }
+    };
+    slide(ROOK_DIRS, byWhite ? 'R' : 'r');
+    slide(BISHOP_DIRS, byWhite ? 'B' : 'b');
+    return out;
+  }
+
+  /** " por el alfil de a6": quién ataca la casilla. */
+  byWhom(sq, byWhite) {
+    const a = this.attackers(sq, byWhite);
+    if (!a.length) return '';
+    const name = { p: 'el peón', n: 'el caballo', b: 'el alfil', r: 'la torre', q: 'la dama', k: 'el rey' }[this.b[a[0]].toLowerCase()];
+    return ' por ' + name + ' de ' + sqName(a[0]);
+  }
+
+  /** El tablero después de enrocar ('K' corto, 'Q' largo) el bando que mueve, sea legal o no (null: no están rey y torre). */
+  castleBoard(side) {
+    const w = this.white, base = w ? 0 : 56, K = w ? 'K' : 'k', R = w ? 'R' : 'r', b = this.b.slice();
+    const rf = side === 'K' ? base + 7 : base, rt = side === 'K' ? base + 5 : base + 3, kt = side === 'K' ? base + 6 : base + 2;
+    if (b[base + 4] !== K || b[rf] !== R) return null;
+    b[base + 4] = '.'; b[rf] = '.'; b[kt] = K; b[rt] = R;
+    return b;
+  }
+
+  /** Por qué no vale la jugada que lleva de esta posición al tablero after (null: no es una jugada reconocible,
+   *  o sí vale). 24/11: el usuario enrocó pasando por f1 atacada (y quedando en jaque en g1) y no entendía por
+   *  qué Maia no contestaba. */
+  illegalReason(after) {
+    const w = this.white, key = after.join('');
+    for (const side of ['K', 'Q']) {
+      const cb = this.castleBoard(side);
+      if (!cb || cb.join('') !== key) continue;
+      const base = w ? 0 : 56, name = side === 'K' ? 'en corto' : 'en largo';
+      if (!(w ? this.castle[side] : this.castle[side.toLowerCase()])) return 'No puedes enrocar ' + name + ': el rey o esa torre ya se han movido en esta partida.';
+      const between = side === 'K' ? [base + 5, base + 6] : [base + 1, base + 2, base + 3];
+      if (between.some(s => this.b[s] !== '.')) return 'No puedes enrocar ' + name + ': hay piezas entre el rey y la torre.';
+      if (this.inCheck(w)) return 'No puedes enrocar ' + name + ': tu rey está en jaque' + this.byWhom(this.kingSq(w), !w) + '.';
+      const cross = side === 'K' ? base + 5 : base + 3, land = side === 'K' ? base + 6 : base + 2;
+      if (this.attacked(cross, !w)) return 'No puedes enrocar ' + name + ': el rey pasaría por ' + sqName(cross) + ', atacada' + this.byWhom(cross, !w) + '.';
+      if (this.attacked(land, !w)) return 'No puedes enrocar ' + name + ': el rey quedaría en jaque en ' + sqName(land) + this.byWhom(land, !w) + '.';
+      return null;
+    }
+    for (const m of this.pseudo()) {
+      const n = this.play(m);
+      if (n.b.join('') !== key || !n.inCheck(w)) continue;
+      return this.inCheck(w) ? 'Esa jugada no saca a tu rey del jaque' + n.byWhom(n.kingSq(w), !w) + '.'
+                             : 'Esa jugada deja a tu rey en jaque' + n.byWhom(n.kingSq(w), !w) + '.';
+    }
+    return null;
+  }
+
+  /** El rey movido dos casillas desde su sitio y la torre aún en la esquina: un enroque a medias ('K'/'Q', o null). */
+  halfCastle(after) {
+    const w = this.white, base = w ? 0 : 56, K = w ? 'K' : 'k';
+    for (const side of ['K', 'Q']) {
+      const b = this.b.slice(), kt = side === 'K' ? base + 6 : base + 2;
+      if (b[base + 4] !== K) continue;
+      b[base + 4] = '.'; b[kt] = K;
+      if (b.join('') === after.join('')) return side;
+    }
+    return null;
+  }
+
   pseudo() {
     const moves = [], b = this.b, w = this.white;
     const own = p => p !== '.' && isWhite(p) === w;
