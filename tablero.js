@@ -100,7 +100,8 @@ function fitCanvas(cv) {
   return cv.getContext('2d');
 }
 
-/** El tablero (BoardView.java). o: {board (64, a1 = 0), flipped, lit, move [de, a], cands [[de, a]...], last {from, to, label}, sel, overlay} */
+/** El tablero (BoardView.java). o: {board (64, a1 = 0), flipped, lit, move [de, a], cands [[de, a]...], last {from, to, label}, sel,
+ *  targets (64: adónde puede ir la pieza tocada), drag {from, x, y (px CSS), touch}, overlay} */
 function drawBoard(cv, o) {
   const g = fitCanvas(cv), side = Math.min(cv.width, cv.height);
   const frame = Math.round(side * 0.045), sq = (side - 2 * frame) / 8;
@@ -148,14 +149,30 @@ function drawBoard(cv, o) {
       for (const [dx, dy] of [[0, 0], [sq, 0], [0, sq], [sq, sq]]) { g.beginPath(); g.arc(x + dx, y + dy, led, 0, 2 * Math.PI); g.fill(); }
     }
   }
-  // piezas
+  // piezas (la que se arrastra, no en su casilla: bajo el dedo)
+  const dragFrom = o.drag ? o.drag.from : -1;
   if (o.board) {
     const size = Math.round(sq);
     for (let s = 0; s < 64; s++) {
       const p = o.board[s];
-      if (p === '.') continue;
+      if (p === '.' || s === dragFrom) continue;
       const [c, r] = xy(s);
       g.drawImage(pieceImage(p, size), frame + c * sq + (sq - size) / 2, frame + r * sq + (sq - size) / 2);
+    }
+  }
+  // (26/11) adónde puede ir la pieza tocada: puntos, y aros donde hay algo que comer
+  if (o.targets) {
+    for (let s = 0; s < 64; s++) {
+      if (!o.targets[s]) continue;
+      const [c, r] = xy(s), cx = frame + c * sq + sq / 2, cy = frame + r * sq + sq / 2;
+      g.beginPath();
+      if (o.board && o.board[s] !== '.') {
+        g.strokeStyle = 'rgba(30,58,138,0.6)'; g.lineWidth = Math.max(3, sq * 0.08);
+        g.arc(cx, cy, sq * 0.44, 0, 2 * Math.PI); g.stroke();
+      } else {
+        g.fillStyle = 'rgba(30,58,138,0.48)';
+        g.arc(cx, cy, sq * 0.15, 0, 2 * Math.PI); g.fill();
+      }
     }
   }
   // flechas: candidatas (azules, la primera más fuerte) y la jugada de Maia (verde)
@@ -189,6 +206,11 @@ function drawBoard(cv, o) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(gr.sym, cx, cy + rad * 0.05);
     g.textBaseline = 'alphabetic';
+  }
+  // (26/11) la pieza que se arrastra con el dedo: algo más grande y por encima de la yema, para que se vea
+  if (o.board && o.drag && o.drag.from >= 0 && o.board[o.drag.from] !== '.') {
+    const dpr = window.devicePixelRatio || 1, big = Math.round(sq * 1.25);
+    g.drawImage(pieceImage(o.board[o.drag.from], big), o.drag.x * dpr - big / 2, o.drag.y * dpr - big * (o.drag.touch ? 0.9 : 0.5));
   }
   // un aviso encima del tablero
   if (o.overlay) {

@@ -18,6 +18,7 @@ const S = {
   maiaMove: null, thinking: false, thinkId: 0, settingUp: false, over: null, result: null,
   physical: null, sel: -1, liftRef: null, lifted: new Array(64).fill(false),
   info: '', infoClass: '', undo: null, undoPaused: false, illegal: null,
+  setUpByUser: false, fixArrow: null, targets: null, drag: null, editBoard: null, palette: null,
   maiaState: 'loading', maiaError: '', view: null, lastShare: 0.5, lastScore: '', analyzedKey: '',
 };
 
@@ -225,6 +226,7 @@ function userMove(m) {
   cancelThinking();
   S.partida.play(m);
   S.sel = -1;
+  S.targets = null;
   const mv = S.partida.moves[S.partida.moves.length - 1];
   log('Tú: ' + (mv.white ? mv.number + '. ' : mv.number + '... ') + mv.san);
   if (!checkEnd()) afterChange();
@@ -250,6 +252,7 @@ function takeBack(k) {
 
 function newGame() {
   cancelThinking();
+  S.setUpByUser = false;
   S.partida = new Partida();
   S.over = null; S.result = null; S.maiaMove = null; S.undo = null;
   clock.newGame();
@@ -315,6 +318,15 @@ function rookFirstCastle(nb) {
   return { move: move || null, why: move ? null : before.illegalReason(nb), before };
 }
 
+/** Todas las piezas de salida, en las filas 1, 2, 7 y 8, pero no la posición inicial (piezas cambiadas de sitio). */
+function looksLikeStart(b) {
+  if (same(b, START.b)) return false;
+  for (let i = 16; i < 48; i++) if (b[i] !== '.') return false;
+  const count = a => { const c = {}; for (const x of a) c[x] = (c[x] || 0) + 1; return c; };
+  const have = count(b), want = count(START.b);
+  return [...'KQRBNPkqrbnp'].every(x => (have[x] || 0) === want[x]);
+}
+
 /** Una posición nueva y quieta en el tablero. */
 function onPhysical(b) {
   S.physical = b;
@@ -323,6 +335,19 @@ function onPhysical(b) {
   if (S.settingUp) { refreshLeds(); scheduleRender(); return; }
   if (S.undo) { checkUndo(); return; }
   const nb = normalize(b), p = S.partida;
+  // 26/11 (como en el PC y en Android): antes de la primera jugada, todas las piezas en sus filas de salida pero alguna
+  // en otra casilla: en rojo, sus casillas encendidas y los pasos para ponerlas bien; Maia espera
+  if (!S.setUpByUser && p.moves.length === 0 && looksLikeStart(nb)) {
+    cancelThinking();
+    S.maiaMove = null;
+    const d = Restore.describe(Restore.steps(nb, START.b, null), nb, START.b);
+    S.illegal = START.b.map((c, i) => c !== nb[i]);
+    S.fixArrow = d.arrow;
+    if (!S.info.startsWith('Piezas mal colocadas')) log('Piezas mal colocadas para empezar: ponlas en la posición inicial; Maia espera.');
+    setInfo('Piezas mal colocadas: ponlas en la posición inicial:\n' + d.text, 'bad');
+    refreshLeds(); scheduleRender(); return;
+  }
+  S.fixArrow = null;
   if (same(nb, START.b) && !(p.fromStart && p.moves.length === 0 && !S.over)) { newGame(); return; }
   if (S.maiaMove && same(nb, S.maiaMove.after.b)) { makeMaia(); return; }
   if (same(nb, p.pos.b)) {
@@ -512,6 +537,9 @@ function startSetUp() {
   cancelThinking();
   S.settingUp = true;
   S.maiaMove = null;
+  clearSel();
+  S.palette = null;
+  S.editBoard = onScreen() ? S.partida.pos.b.slice() : null;   // en la pantalla: se monta sobre la posición de ahora
   clock.newGame();
   setInfo('Montando posición: coloca las piezas y pulsa abajo quién empieza: blancas o negras', 'amber');
   log('Montar posición: coloca las piezas como quieras (Maia espera, el reloj no corre y no se apuntan jugadas) y luego pulsa quién empieza: blancas o negras.');
@@ -520,7 +548,7 @@ function startSetUp() {
 }
 
 function startFrom(white) {
-  const b = S.physical ? normalize(S.physical) : S.partida.pos.b.slice();
+  const b = S.physical && connected() ? normalize(S.physical) : (S.editBoard || S.partida.pos.b).slice();
   const pos = new Pos();
   pos.b = b.slice();
   pos.white = white;
@@ -532,6 +560,8 @@ function startFrom(white) {
   if (pos.isStart() === false && same(b, START.b) && !white) return bad('En la posición inicial empiezan las blancas.');
   if (!pos.legal().length) return bad('En esa posición las ' + (white ? 'blancas' : 'negras') + ' no tienen ninguna jugada.');
   S.settingUp = false;
+  S.setUpByUser = true;                  // (sus piezas están donde las puso el usuario: no son "mal colocadas")
+  S.editBoard = null; S.palette = null; S.sel = -1; S.targets = null;
   S.partida = new Partida(pos);
   S.over = null; S.result = null; S.maiaMove = null;
   clock.newGame();
@@ -542,6 +572,7 @@ function startFrom(white) {
 
 function cancelSetUp() {
   S.settingUp = false;
+  S.editBoard = null; S.palette = null; S.sel = -1;
   log('Montar posición cancelado.');
   if (S.physical) onPhysical(S.physical); else afterChange();
 }
@@ -593,17 +624,134 @@ function flip() { S.flipped = !S.flipped; scheduleRender(); }
 
 // ---- tocar la pantalla (sin tablero)
 
-function onSquare(sq) {
-  if (sq < 0 || (connected() && S.physical)) return;       // con el Chessnut, las jugadas se hacen en el tablero
+const onScreen = () => !(connected() && S.physical);      // sin el Chessnut: se juega tocando la pantalla
+
+/** Se puede mover ahora en la pantalla: te toca y no hay nada pendiente. */
+function userMayMove() {
   const p = S.partida;
-  if (S.settingUp || S.over || p.pos.white !== S.humanWhite || S.thinking || S.maiaMove) return;
-  const mine = c => c !== '.' && isWhite(c) === S.humanWhite;
-  if (S.sel >= 0) {
-    const c = p.pos.legal().filter(m => m.from === S.sel && m.to === sq);
-    if (c.length) { userMove(c.find(m => !m.promo || m.promo === 'q')); return; }
+  return onScreen() && !S.settingUp && !S.over && !S.undo && !S.thinking && !S.maiaMove && p.pos.white === S.humanWhite;
+}
+
+/** La pieza tocada (o arrastrada): se marca y se ven sus casillas (26/11: puntos, como en Android y en el PC). */
+function selectSquare(sq) {
+  const pos = S.partida.pos;
+  S.sel = sq;
+  S.targets = new Array(64).fill(false);
+  for (const m of pos.legal()) if (m.from === sq) S.targets[m.to] = true;
+}
+function clearSel() { S.sel = -1; S.targets = null; }
+
+/** La jugada de from a to en la pantalla, si vale (al coronar se pregunta la pieza); true: hecha o preguntada. */
+function screenMove(from, to) {
+  const c = S.partida.pos.legal().filter(m => m.from === from && m.to === to);
+  if (!c.length) return false;
+  clearSel();
+  if (c.length > 1 && c.some(m => m.promo)) {
+    const names = { q: 'Dama', r: 'Torre', b: 'Alfil', n: 'Caballo' };
+    dialog('Coronación: ¿qué pieza?', '', [{ label: 'Cancelar', fn: () => scheduleRender() }],
+           ['q', 'r', 'b', 'n'].map(k => ({ label: names[k], fn: () => { const m = c.find(x => x.promo === k); if (m) userMove(m); } })));
+    scheduleRender();
+    return true;
   }
-  S.sel = mine(p.pos.b[sq]) && S.sel !== sq ? sq : -1;
+  userMove(c[0]);
+  return true;
+}
+
+function onSquare(sq) {
+  if (sq < 0 || !onScreen()) return;                        // con el Chessnut, las jugadas se hacen en el tablero
+  if (S.settingUp) { editTap(sq); return; }
+  const p = S.partida;
+  if (!userMayMove()) { clearSel(); scheduleRender(); return; }
+  if (S.sel >= 0 && screenMove(S.sel, sq)) return;
+  const mine = c => c !== '.' && isWhite(c) === S.humanWhite;
+  if (mine(p.pos.b[sq]) && S.sel !== sq) selectSquare(sq); else clearSel();
   scheduleRender();
+}
+
+// ---- montar posición en la pantalla (26/11, como en Android y en el PC): una pieza elegida en la fila de abajo va
+// donde toques (otra vez: se quita), la cruz quita; sin ninguna elegida, una pieza tocada va donde toques después
+
+function editTap(sq) {
+  if (!S.editBoard) S.editBoard = S.partida.pos.b.slice();
+  const e = S.editBoard;
+  if (S.palette === 'x') e[sq] = '.';
+  else if (S.palette) e[sq] = e[sq] === S.palette ? '.' : S.palette;
+  else if (S.sel >= 0) { if (sq !== S.sel) { e[sq] = e[S.sel]; e[S.sel] = '.'; } clearSel(); }
+  else if (e[sq] !== '.') { S.sel = sq; S.targets = null; }
+  scheduleRender();
+}
+
+function buildPalette() {
+  const row = $('palette');
+  if (!row || row.childElementCount) return;
+  for (const p of 'KQRBNPkqrbnpx') {
+    const c = document.createElement('canvas');
+    c.className = 'pc';
+    c.title = p === 'x' ? 'Quitar' : '';
+    c.onclick = () => { S.palette = S.palette === p ? null : p; clearSel(); renderPalette(); };
+    c.dataset.p = p;
+    row.appendChild(c);
+  }
+  const empty = document.createElement('button');
+  empty.textContent = 'Vaciar';
+  empty.onclick = () => { S.editBoard = new Array(64).fill('.'); clearSel(); scheduleRender(); };
+  const start = document.createElement('button');
+  start.textContent = 'Inicial';
+  start.onclick = () => { S.editBoard = START.b.slice(); clearSel(); scheduleRender(); };
+  row.appendChild(empty);
+  row.appendChild(start);
+}
+
+function renderPalette() {
+  const row = $('palette');
+  if (!row) return;
+  const show = S.settingUp && onScreen();
+  row.style.display = show ? '' : 'none';
+  if (!show) return;
+  buildPalette();
+  for (const c of row.querySelectorAll('canvas.pc')) {
+    const dpr = window.devicePixelRatio || 1, w = Math.round(c.getBoundingClientRect().width * dpr) || 34, h = Math.round(c.getBoundingClientRect().height * dpr) || 34;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const g = c.getContext('2d'), p = c.dataset.p, s = Math.min(w, h);
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = S.palette === p ? '#BBD7F5' : '#F0D9B5';
+    g.fillRect(0, 0, w, h);
+    if (p === 'x') {
+      g.strokeStyle = '#C8402F'; g.lineWidth = Math.max(3, s * 0.1);
+      g.beginPath(); g.moveTo(w / 2 - s * 0.22, h / 2 - s * 0.22); g.lineTo(w / 2 + s * 0.22, h / 2 + s * 0.22);
+      g.moveTo(w / 2 + s * 0.22, h / 2 - s * 0.22); g.lineTo(w / 2 - s * 0.22, h / 2 + s * 0.22); g.stroke();
+    } else g.drawImage(pieceImage(p, Math.round(s * 0.92)), (w - s * 0.92) / 2, (h - s * 0.92) / 2);
+    if (S.palette === p) { g.strokeStyle = '#1E88E5'; g.lineWidth = Math.max(2, s * 0.07); g.strokeRect(1, 1, w - 2, h - 2); }
+  }
+}
+
+// ---- arrastrar con el dedo o con el ratón (26/11, como en Android y en el PC): pulsa en una de tus piezas, llévala (se
+// ven sus casillas) y suéltala en una de ellas; si no, vuelve. Montando: cualquier pieza, y soltarla fuera la quita.
+
+function dragStart(sq) {
+  if (sq < 0 || !onScreen()) return false;
+  if (S.settingUp) {
+    if (!S.editBoard) S.editBoard = S.partida.pos.b.slice();
+    if (S.editBoard[sq] === '.') return false;
+    clearSel();
+    return true;
+  }
+  const b = S.partida.pos.b;
+  if (!userMayMove() || b[sq] === '.' || isWhite(b[sq]) !== S.humanWhite) return false;
+  selectSquare(sq);
+  return true;
+}
+
+function drop(from, to) {
+  if (S.settingUp) {
+    const e = S.editBoard;
+    if (to < 0) e[from] = '.';
+    else if (to !== from) { e[to] = e[from]; e[from] = '.'; }
+    clearSel();
+    scheduleRender();
+    return;
+  }
+  if (to < 0 || to === from || !userMayMove() || !screenMove(from, to)) { clearSel(); scheduleRender(); }
 }
 
 // ---- partidas: las terminadas se guardan en este navegador; "Enviar partida" las manda (menú de compartir)
@@ -697,7 +845,8 @@ function render() {
   const p = S.partida, pos = p.pos, fen = pos.fen();
   // «Atrás»: la posición a la que se vuelve, en la pantalla en el acto (el Chessnut se coloca igual)
   const backTo = S.undo ? p.positions[S.undo.k].b : null;
-  const shown = backTo || (connected() && S.physical ? S.physical : pos.b);
+  const editing = S.settingUp && onScreen() && S.editBoard;    // montando en la pantalla
+  const shown = backTo || (editing ? S.editBoard : connected() && S.physical ? S.physical : pos.b);
   // la última jugada con su nota (volviendo atrás: la última que queda)
   const graded = analysisOn();
   let last = null;
@@ -742,8 +891,9 @@ function render() {
   // tablero y barra
   geo = drawBoard($('board'), {
     board: shown, flipped: S.flipped, lit: undoLit() || S.illegal || maiaLit(),
-    move: backTo ? S.undo.arrow : S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : null,
-    cands: S.candCount > 0 && !backTo ? cands : null, last, sel: S.sel,
+    move: backTo ? S.undo.arrow : S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : S.fixArrow,
+    cands: S.candCount > 0 && !backTo && !editing && !S.fixArrow ? cands : null, last: editing ? null : last, sel: S.sel,
+    targets: S.targets, drag: S.drag,
   });
   $('bar').style.display = S.barOn ? '' : 'none';
   bar.set(S.lastShare, S.lastScore, S.flipped, S.barOn && (!!v || !legal.length));
@@ -773,8 +923,12 @@ function render() {
     : S.maiaState === 'error' ? dot(RED) + 'Maia no arranca: ' + esc(S.maiaError) : dot(AMBER) + 'Cargando Maia ' + S.level + '...');
   $('status').innerHTML = st;
   const info = $('info');
-  info.textContent = S.over && !S.info.startsWith('Partida terminada') ? 'Partida terminada: ' + S.over : S.info || ' ';
+  info.textContent = S.over && !S.info.startsWith('Partida terminada') ? 'Partida terminada: ' + S.over
+                   : onScreen() && S.info === 'Te toca' ? 'Te toca: toca una pieza y luego su casilla (o arrástrala)'
+                   : onScreen() && S.settingUp ? 'Montando posición: elige una pieza abajo y toca las casillas (otra vez: se quita; sin elegir, toca una pieza y luego dónde va, o arrástrala); luego pulsa quién empieza'
+                   : S.info || ' ';
   info.className = S.infoClass;
+  renderPalette();
   // material
   const mt = $('material');
   mt.style.display = S.materialOn ? '' : 'none';
@@ -870,7 +1024,46 @@ function longPress(el, onTap, onLong) {
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-longPress($('board'), e => { const r = $('board').getBoundingClientRect(); if (geo) onSquare(squareAt(geo, e.clientX - r.left, e.clientY - r.top)); }, () => flip());
+// el tablero: un toque (casilla), arrastrar una pieza (26/11) o dejar el dedo encima (girar el tablero)
+(function boardPointer() {
+  const el = $('board');
+  let start = null, timer = null, longFired = false, dragging = false, from = -1;
+  const pt = e => { const r = el.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  el.addEventListener('pointerdown', e => {
+    const p = pt(e);
+    start = p; longFired = false; dragging = false;
+    from = geo ? squareAt(geo, p.x, p.y) : -1;
+    try { el.setPointerCapture(e.pointerId); } catch (_) { }
+    timer = setTimeout(() => { timer = null; if (!dragging) { longFired = true; flip(); } }, 650);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!start) return;
+    const p = pt(e);
+    if (!dragging) {
+      if (Math.hypot(p.x - start.x, p.y - start.y) < 8) return;
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (longFired || !dragStart(from)) { start = null; return; }
+      dragging = true;
+    }
+    S.drag = { from, x: p.x, y: p.y, touch: e.pointerType === 'touch' };
+    scheduleRender();
+  });
+  el.addEventListener('pointerup', e => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!start) return;
+    const p = pt(e);
+    if (dragging) { S.drag = null; drop(from, geo ? squareAt(geo, p.x, p.y) : -1); }
+    else if (!longFired && geo) onSquare(squareAt(geo, start.x, start.y));
+    start = null; dragging = false;
+  });
+  el.addEventListener('pointercancel', () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (dragging) { S.drag = null; clearSel(); scheduleRender(); }
+    start = null; dragging = false;
+  });
+  el.addEventListener('contextmenu', e => e.preventDefault());
+})();
 longPress($('clock'), () => { clock.togglePause(); scheduleRender(); }, () => { clock.newGame(); updateClock(); log('Reloj a cero: empieza con la primera jugada.'); scheduleRender(); });
 
 const fill = (sel, items, val) => { for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); } sel.value = val; };

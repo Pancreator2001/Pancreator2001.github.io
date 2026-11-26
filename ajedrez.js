@@ -197,6 +197,42 @@ class Pos {
       return this.inCheck(w) ? 'Esa jugada no saca a tu rey del jaque' + n.byWhom(n.kingSq(w), !w) + '.'
                              : 'Esa jugada deja a tu rey en jaque' + n.byWhom(n.kingSq(w), !w) + '.';
     }
+    return this.shapeReason(after);
+  }
+
+  /** 26/11, como en Windows y Android: una pieza que salta por encima de otras (solo salta el caballo) o que no mueve
+   *  así, y un peón en diagonal a una casilla vacía (la captura al paso fuera de tiempo): por qué; null si no es eso. */
+  shapeReason(after) {
+    const w = this.white, own = p => p !== '.' && isWhite(p) === w;
+    const vac = [], fil = [];
+    for (let s = 0; s < 64; s++) {
+      if (this.b[s] === after[s]) continue;
+      if (this.b[s] !== '.' && after[s] === '.') vac.push(s);
+      else if (after[s] !== '.') fil.push(s);
+    }
+    if (fil.length !== 1 || (vac.length !== 1 && vac.length !== 2)) return null;
+    const to = fil[0], from = vac.find(s => own(this.b[s]) && this.b[s] === after[to] ||
+                                            own(this.b[s]) && this.b[s].toLowerCase() === 'p' && ((to >> 3) === 7 || (to >> 3) === 0));
+    if (from === undefined) return null;
+    const p = this.b[from], up = p.toUpperCase();
+    const dr = (to >> 3) - (from >> 3), dc = (to & 7) - (from & 7), ar = Math.abs(dr), ac = Math.abs(dc);
+    const sq = s => sqName(s), who = Restore.the(p), Who = who.charAt(0).toUpperCase() + who.slice(1);
+    if (up === 'P') {
+      if (ac !== 1 || dr !== (w ? 1 : -1) || this.b[to] !== '.' || to === this.ep) return null;
+      const beside = (from & ~7) | (to & 7);
+      return this.b[beside] === (w ? 'p' : 'P')
+        ? 'La captura al paso solo vale justo después de que ese peón avance dos casillas y quede al lado del tuyo.'
+        : 'Un peón solo va en diagonal para comer.';
+    }
+    if (vac.length !== 1) return null;
+    if (up === 'N') return (ar === 1 && ac === 2) || (ar === 2 && ac === 1) ? null : Who + ' mueve en L (dos casillas hacia un lado y una más en ángulo), no de ' + sq(from) + ' a ' + sq(to) + '.';
+    if (up === 'K') return ar <= 1 && ac <= 1 ? null : Who + ' solo mueve una casilla (salvo al enrocar), no de ' + sq(from) + ' a ' + sq(to) + '.';
+    if (up === 'B' && ar !== ac) return Who + ' solo mueve en diagonal, no de ' + sq(from) + ' a ' + sq(to) + '.';
+    if (up === 'R' && dr !== 0 && dc !== 0) return Who + ' solo mueve en línea recta (por su fila o su columna), no de ' + sq(from) + ' a ' + sq(to) + '.';
+    if (up === 'Q' && dr !== 0 && dc !== 0 && ar !== ac) return Who + ' solo mueve en línea recta o en diagonal, no de ' + sq(from) + ' a ' + sq(to) + '.';
+    const step = Math.sign(dr) * 8 + Math.sign(dc);
+    for (let s = from + step; s !== to; s += step)
+      if (this.b[s] !== '.') return Who + ' no puede saltar por encima de otras piezas (solo salta el caballo): entre ' + sq(from) + ' y ' + sq(to) + ' está ' + Restore.the(this.b[s]) + ' de ' + sq(s) + '.';
     return null;
   }
 
@@ -554,7 +590,7 @@ const Restore = (() => {
     if (end < n) lines.push('    … y ' + (n - end) + (n - end === 1 ? ' paso más' : ' pasos más'));
     return { text: lines.join('\n'), arrow };
   }
-  return { order, steps, fits, describe, done };
+  return { order, steps, fits, describe, done, the };
 })();
 
 if (typeof module !== 'undefined') module.exports = { Pos, Partida, sqName, sqIndex, isWhite, START_FEN, Restore };
