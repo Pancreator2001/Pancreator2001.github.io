@@ -16,6 +16,8 @@
   #boardRow { display: flex; gap: 6px; justify-content: center; }
   #bar { width: 46px; flex: none; }
   #board { width: var(--bs); height: var(--bs); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #moves .cell[data-i] { cursor: pointer; }
+  #moves .cell.viewed { background: #BBD7F5; }
   #palette { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; margin-top: 6px; }
   #palette canvas.pc { flex: 0 0 calc((100% - 24px) / 13); min-width: 0; height: 40px; border-radius: 4px; cursor: pointer; }
   #palette button { flex: 1 1 40%; min-height: 36px; padding: 6px 8px; margin-top: 2px; }

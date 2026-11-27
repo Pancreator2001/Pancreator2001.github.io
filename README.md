@@ -10,6 +10,7 @@ Juega en un tablero **Chessnut Air** contra **Maia**, que juega como la gente de
 - Las jugadas ilegales se explican (por ejemplo, un enroque pasando por una casilla atacada) y se encienden sus casillas para devolver las piezas. El enroque vale empezando por el rey o por la torre. Una pieza que salta por encima de otras (solo salta el caballo) o una captura al paso fuera de tiempo también se explican. Antes de la primera jugada, las piezas cambiadas de sitio se avisan en rojo con los pasos para colocarlas (Maia espera).
 - Análisis de **Stockfish 18**: barra de evaluación, de 0 a 5 jugadas candidatas y la nota de cada jugada (Mejor, Excelente, Buena, Imprecisión, Error, Error grave).
 - Reloj (tiempo usado o partida con tiempo), material, apertura.
+- Toca una jugada de la lista (de blancas o de negras): el tablero de la pantalla muestra la posición después de esa jugada, marcada en azul. Tócala otra vez, o toca el tablero, para volver a la partida.
 - **Enviar partida**: el PGN, con el menú de compartir. Las partidas terminadas se guardan en el navegador.
 - Sin tablero se juega tocando la pantalla: toca una pieza (salen puntos donde puede ir) y luego su casilla, o arrástrala con el dedo; al coronar se elige la pieza. Mantener pulsado el tablero lo gira.
 

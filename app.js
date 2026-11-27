@@ -19,6 +19,7 @@ const S = {
   physical: null, sel: -1, liftRef: null, lifted: new Array(64).fill(false),
   info: '', infoClass: '', undo: null, undoPaused: false, illegal: null,
   setUpByUser: false, fixArrow: null, targets: null, drag: null, editBoard: null, palette: null,
+  review: -1, reviewKey: '',
   maiaState: 'loading', maiaError: '', view: null, lastShare: 0.5, lastScore: '', analyzedKey: '',
 };
 
@@ -846,11 +847,13 @@ function render() {
   // «Atrás»: la posición a la que se vuelve, en la pantalla en el acto (el Chessnut se coloca igual)
   const backTo = S.undo ? p.positions[S.undo.k].b : null;
   const editing = S.settingUp && onScreen() && S.editBoard;    // montando en la pantalla
-  const shown = backTo || (editing ? S.editBoard : connected() && S.physical ? S.physical : pos.b);
-  // la última jugada con su nota (volviendo atrás: la última que queda)
+  const ri = reviewIndex();                                     // una jugada de la lista que se está mirando (27/11)
+  const viewed = ri >= 0 ? p.positions[ri + 1].b : null;
+  const shown = backTo || viewed || (editing ? S.editBoard : connected() && S.physical ? S.physical : pos.b);
+  // la última jugada con su nota (volviendo atrás: la última que queda; mirando una: esa)
   const graded = analysisOn();
   let last = null;
-  const li = backTo ? S.undo.k - 1 : p.moves.length - 1;
+  const li = backTo ? S.undo.k - 1 : viewed ? ri : p.moves.length - 1;
   if (li >= 0) {
     const lm = p.moves[li];
     last = { from: sqIndex(lm.uci.slice(0, 2)), to: sqIndex(lm.uci.slice(2, 4)), label: graded ? revision.grade(p, li).label : '' };
@@ -890,10 +893,10 @@ function render() {
   }
   // tablero y barra
   geo = drawBoard($('board'), {
-    board: shown, flipped: S.flipped, lit: undoLit() || S.illegal || maiaLit(),
-    move: backTo ? S.undo.arrow : S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : S.fixArrow,
-    cands: S.candCount > 0 && !backTo && !editing && !S.fixArrow ? cands : null, last: editing ? null : last, sel: S.sel,
-    targets: S.targets, drag: S.drag,
+    board: shown, flipped: S.flipped, lit: viewed ? null : undoLit() || S.illegal || maiaLit(),
+    move: viewed ? null : backTo ? S.undo.arrow : S.maiaMove ? [S.maiaMove.m.from, S.maiaMove.m.to] : S.fixArrow,
+    cands: S.candCount > 0 && !backTo && !editing && !viewed && !S.fixArrow ? cands : null, last: editing ? null : last,
+    sel: viewed ? -1 : S.sel, targets: viewed ? null : S.targets, drag: viewed ? null : S.drag,
   });
   $('bar').style.display = S.barOn ? '' : 'none';
   bar.set(S.lastShare, S.lastScore, S.flipped, S.barOn && (!!v || !legal.length));
@@ -923,7 +926,9 @@ function render() {
     : S.maiaState === 'error' ? dot(RED) + 'Maia no arranca: ' + esc(S.maiaError) : dot(AMBER) + 'Cargando Maia ' + S.level + '...');
   $('status').innerHTML = st;
   const info = $('info');
-  info.textContent = S.over && !S.info.startsWith('Partida terminada') ? 'Partida terminada: ' + S.over
+  const rm = viewed ? p.moves[ri] : null;
+  info.textContent = rm ? 'Viendo ' + (rm.white ? rm.number + '. ' : rm.number + '... ') + rm.san + ': toca otra vez la jugada, o el tablero, para volver a la partida'
+                   : S.over && !S.info.startsWith('Partida terminada') ? 'Partida terminada: ' + S.over
                    : onScreen() && S.info === 'Te toca' ? 'Te toca: toca una pieza y luego su casilla (o arrástrala)'
                    : onScreen() && S.settingUp ? 'Montando posición: elige una pieza abajo y toca las casillas (otra vez: se quita; sin elegir, toca una pieza y luego dónde va, o arrástrala); luego pulsa quién empieza'
                    : S.info || ' ';
@@ -959,7 +964,7 @@ function renderMoves(graded) {
   const p = S.partida;
   const grades = graded ? p.moves.map((_, i) => revision.grade(p, i)) : [];
   const gone = S.undo ? S.undo.k : -1;            // «Atrás»: las jugadas que se deshacen, tachadas
-  const key = p.moves.map(m => m.uci).join(' ') + '|' + grades.map(g => g.label + g.better).join(',') + '|' + graded + '|' + S.over + '|' + gone;
+  const key = p.moves.map(m => m.uci).join(' ') + '|' + grades.map(g => g.label + g.better).join(',') + '|' + graded + '|' + S.over + '|' + gone + '|' + S.review;
   if (key === shownMovesKey) return;
   shownMovesKey = key;
   const box = $('moves');
@@ -977,7 +982,8 @@ function renderMoves(graded) {
       cell += '   <span class="g" style="color:' + GRADE[g.label].color + '">' + GRADE[g.label].sym + ' ' + gradeText(g.label) + '</span>';
       if (g.better) cell += '<span class="bt">  (mejor ' + esc(g.better) + ')</span>';
     } else if (lastOne && graded) cell += '<span class="bt">   …</span>';
-    const td = '<div class="cell' + (lastOne ? ' last' : '') + (isGone ? ' gone' : '') + '">' + cell + '</div>';
+    const viewed = i === S.review;
+    const td = '<div class="cell' + (viewed ? ' viewed' : lastOne ? ' last' : '') + (isGone ? ' gone' : '') + '" data-i="' + i + '">' + cell + '</div>';
     if (m.white || !open) {
       if (open) h += '</div>';
       h += '<div class="mrow"><div class="num">' + m.number + '.</div>' + (m.white ? td : '<div class="cell">…</div>' + td);
@@ -988,8 +994,34 @@ function renderMoves(graded) {
   if (open) h += '<div class="cell"></div></div>';
   if (S.over) h += '<div class="empty"><b>' + esc(S.over) + '</b></div>';
   box.innerHTML = h;
-  box.scrollTop = box.scrollHeight;
+  if (S.review < 0) box.scrollTop = box.scrollHeight;
 }
+
+// ---- una jugada de la lista (27/11, pedido por el usuario: "cuando pulse la lista de jugadas en una jugada concreta,
+// las piezas de la pantalla se coloquen en la posición ... de esa jugada", de blancas o de negras): su posición en el
+// tablero de la pantalla, la jugada marcada allí y en azul en la lista. Se vuelve a la partida tocándola otra vez,
+// tocando el tablero o al seguir la partida. Solo la pantalla: el Chessnut y la partida no se tocan.
+
+const reviewKeyNow = () => S.partida.moves.length + '|' + (S.physical ? S.physical.join('') : '');
+
+/** La jugada que se está mirando, si sigue valiendo (si no, de vuelta a la partida: -1). */
+function reviewIndex() {
+  if (S.review < 0) return -1;
+  if (S.review >= S.partida.moves.length || S.undo || S.settingUp || reviewKeyNow() !== S.reviewKey) S.review = -1;
+  return S.review;
+}
+
+$('moves').addEventListener('click', e => {
+  const c = e.target.closest('.cell[data-i]');
+  if (!c) return;
+  const i = +c.dataset.i;
+  S.review = S.review === i ? -1 : i;
+  S.reviewKey = reviewKeyNow();
+  clearSel();
+  scheduleRender();
+});
+
+function endReview() { if (S.review >= 0) { S.review = -1; scheduleRender(); } }
 
 /** El tamaño del tablero: a todo lo ancho en el móvil, dejando sitio al panel debajo. */
 function layout() {
@@ -1030,6 +1062,7 @@ function longPress(el, onTap, onLong) {
   let start = null, timer = null, longFired = false, dragging = false, from = -1;
   const pt = e => { const r = el.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   el.addEventListener('pointerdown', e => {
+    if (S.review >= 0) { endReview(); start = null; return; }     // mirando una jugada de la lista: de vuelta a la partida
     const p = pt(e);
     start = p; longFired = false; dragging = false;
     from = geo ? squareAt(geo, p.x, p.y) : -1;
