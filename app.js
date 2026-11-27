@@ -991,7 +991,11 @@ function renderMoves(graded) {
       if (!m.white) { h += '</div>'; open = false; }
     } else { h += td + '</div>'; open = false; }
   });
-  if (open) h += '<div class="cell"></div></div>';
+  // el resultado tras la última jugada (27/11, pedido por el usuario): «16. Db2#  1-0»; tras una de negras, en otra fila
+  const res = S.over && S.result && S.result !== '*' && gone < 0 ? (S.result === '1/2-1/2' ? '½-½' : S.result) : '';
+  const resCell = '<div class="cell result"><b>' + res + '</b></div>';
+  if (open) h += (res ? resCell : '<div class="cell"></div>') + '</div>';
+  else if (res) h += '<div class="mrow"><div class="num"></div>' + resCell + '<div class="cell"></div></div>';
   if (S.over) h += '<div class="empty"><b>' + esc(S.over) + '</b></div>';
   box.innerHTML = h;
   if (S.review < 0) box.scrollTop = box.scrollHeight;
