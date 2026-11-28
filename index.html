@@ -49,9 +49,9 @@
   button:disabled { opacity: .45; }
   #movesHead { display: flex; align-items: flex-end; margin-top: 6px; }
   #movesHead span { flex: 1; font-size: 12px; color: #7A6E60; padding: 6px 2px 2px; }
-  #movesHead .nav { background: #F6EBD9; border: 1px solid #D2B48C; color: #5A3A1A; border-radius: 8px; font-size: 15px; width: 40px; height: 30px; padding: 0; min-height: 0; margin: 4px 4px 2px 0; }
-  #movesHead .nav:disabled { opacity: 0.35; }
-  #movesHead .nav:last-of-type { margin-right: 8px; }
+  #navRow { display: flex; justify-content: center; gap: 8px; margin-top: 4px; height: 32px; }
+  #navRow .nav { background: #F6EBD9; border: 1px solid #D2B48C; color: #5A3A1A; border-radius: 8px; font-size: 15px; width: 48px; height: 32px; padding: 0; min-height: 0; margin: 0; }
+  #navRow .nav:disabled { opacity: 0.35; }
   #send { background: #F6EBD9; border: 1px solid #D2B48C; color: #8A4B14; border-radius: 14px; font-size: 13px; padding: 3px 10px; min-height: 0; margin: 4px 0 2px; }
   #moves { background: #fff; border: 1px solid #DDD0BA; border-radius: 10px; height: 220px; overflow-y: auto; padding: 2px; }
   #moves .mrow { display: flex; font-size: 13px; }
@@ -92,6 +92,7 @@
   <header>Ajedrez contra Maia</header>
   <div id="top">
     <div id="boardRow"><canvas id="bar"></canvas><canvas id="board"></canvas></div>
+    <div id="navRow"><button class="nav" id="navFirst" title="Al inicio">◀&#xFE0E;◀&#xFE0E;</button><button class="nav" id="navPrev" title="Jugada anterior">◀&#xFE0E;</button><button class="nav" id="navNext" title="Jugada siguiente">▶&#xFE0E;</button><button class="nav" id="navLast" title="Al último movimiento (volver a la partida)">▶&#xFE0E;▶&#xFE0E;</button></div>
     <div id="opening"></div>
     <div id="cands"></div>
   </div>
@@ -120,7 +121,7 @@
       <button id="btnNew">Nueva partida</button>
     </div>
     <div id="palette" style="display:none"></div>
-    <div id="movesHead"><span>Jugadas</span><button class="nav" id="navFirst" title="Al inicio">◀&#xFE0E;◀&#xFE0E;</button><button class="nav" id="navPrev" title="Jugada anterior">◀&#xFE0E;</button><button class="nav" id="navNext" title="Jugada siguiente">▶&#xFE0E;</button><button class="nav" id="navLast" title="Al último movimiento (volver a la partida)">▶&#xFE0E;▶&#xFE0E;</button><button id="send">✉&#xFE0E; Enviar</button></div>
+    <div id="movesHead"><span>Jugadas</span><button id="send">✉&#xFE0E; Enviar partida</button></div>
     <div id="moves"></div>
     <div class="row" style="margin-top:8px">
       <span class="field"><span class="lbl">Maia</span><select id="level"></select></span>
@@ -137,6 +138,9 @@
     <div class="row" style="margin-top:6px">
       <span class="field"><span class="lbl">Reloj</span><select id="clockSel"></select></span>
       <span class="field"><span class="lbl">Piezas</span><select id="pieceSel"></select></span>
+    </div>
+    <div class="row" style="margin-top:4px">
+      <span class="field"><span class="lbl">Tablero</span><select id="boardSel"></select></span>
     </div>
     <div id="logLabel">Registro</div>
     <div id="log"></div>

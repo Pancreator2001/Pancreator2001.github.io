@@ -47,10 +47,11 @@ function load(key, def) { try { const v = localStorage.getItem(key); return v ? 
   if (p.candCount >= 0 && p.candCount <= 5) S.candCount = p.candCount;
   if (CLOCKS.includes(p.clockCtl)) S.clockCtl = p.clockCtl;
   setPieceSet(p.pieces || 'staunton');
+  setBoardStyle(p.board || 'arce');
   S.flipped = !S.humanWhite;
 })();
 function savePrefs() {
-  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl, pieces: pieceSet });
+  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl, pieces: pieceSet, board: boardStyle });
 }
 
 /** La partida en curso, para seguirla si se cierra o recarga la página (como la app: si el tablero coincide). */
@@ -1071,11 +1072,13 @@ function layout() {
   const head = document.querySelector('header').offsetHeight;
   const candsH = S.candCount > 0 ? Math.ceil(S.candCount / 2) * 21 : 0;
   const barW = S.barOn ? 52 : 0;                          // la barra, 46 px (24/11: más ancha para leer la cifra)
-  let bs = big ? Math.min(vh - head - 30 - 34 - candsH, vw * 0.6 - barW - 20) : Math.min(vw - 16 - barW, vh - head - 14 - 34 - candsH - 150);
+  const navH = 36;                                        // las flechas ◀◀ ◀ ▶ ▶▶ debajo del tablero (28/11)
+  let bs = big ? Math.min(vh - head - 30 - 34 - navH - candsH, vw * 0.6 - barW - 20) : Math.min(vw - 16 - barW, vh - head - 14 - 34 - navH - candsH - 150);
   bs = Math.max(220, Math.floor(bs));
   document.documentElement.style.setProperty('--bs', bs + 'px');
   $('bar').style.height = bs + 'px';
   $('bar').style.width = '46px';
+  $('navRow').style.paddingLeft = barW + 'px';            // (las flechas centradas bajo el tablero, no bajo tablero y barra)
   scheduleRender();
   setTimeout(() => { bar.draw(); scheduleRender(); }, 50);
 }
@@ -1146,6 +1149,7 @@ fill($('pause'), Array.from({ length: 11 }, (_, i) => [i, i + ' s']), S.pause);
 fill($('candCount'), [0, 1, 2, 3, 4, 5].map(i => [i, i]), S.candCount);
 fill($('clockSel'), CLOCKS.map(c => [c, clockName(c)]), S.clockCtl);
 fill($('pieceSel'), PIECE_SETS, pieceSet);
+fill($('boardSel'), BOARD_STYLES, boardStyle);
 $('color').value = S.humanWhite ? 'w' : 'b';
 $('variety').checked = S.variety;
 $('chkBar').checked = S.barOn;
@@ -1169,6 +1173,7 @@ $('chkMaterial').onchange = () => { S.materialOn = $('chkMaterial').checked; sav
 $('candCount').onchange = () => { S.candCount = +$('candCount').value; savePrefs(); analyze(); layout(); };
 $('clockSel').onchange = () => { S.clockCtl = $('clockSel').value; savePrefs(); clock.setControl(S.clockCtl); updateClock(); log('Reloj: ' + clockName(S.clockCtl) + '.'); scheduleRender(); };
 $('pieceSel').onchange = () => { setPieceSet($('pieceSel').value); savePrefs(); scheduleRender(); };
+$('boardSel').onchange = () => { setBoardStyle($('boardSel').value); savePrefs(); scheduleRender(); };
 $('turn').onclick = toggleTurn;
 $('btnBack').onclick = () => { if (S.settingUp) startFrom(true); else back(); };
 $('btnSetup').onclick = () => { if (S.settingUp) startFrom(false); else startSetUp(); };

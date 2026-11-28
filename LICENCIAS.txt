@@ -35,9 +35,10 @@ AJEDREZ CONTRA MAIA (WEB) - PROCEDENCIA Y LICENCIAS
   - Chessnut: Alexis Luengas (https://github.com/LexLuengas/chessnut-pieces),
     Apache 2.0.
 
-* El tablero de madera (recursos/tablero_madera.jpg): dibujado entero por un
-  programa propio (GenerarTableroMadera.cs, ruido de valores; sin fotos ni
-  imagenes de nadie), libre.
+* Los tableros de madera (recursos/tablero_madera_*.jpg: arce, roble,
+  cerezo, caoba, palisandro y nogal): dibujados enteros por un programa
+  propio (GenerarTableroMadera.cs, ruido de valores; sin fotos ni imagenes de
+  nadie), libres.
 
 * La lista de aperturas (recursos/aperturas.tsv.gz): la de Lichess
   (https://github.com/lichess-org/chess-openings), dominio publico (CC0),

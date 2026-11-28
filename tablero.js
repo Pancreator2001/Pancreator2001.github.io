@@ -122,13 +122,23 @@ const GRADE = {
 const gradeText = l => l === 'Imprecision' ? 'Imprecisión' : l;
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
 
-// ---- el tablero de madera (28/11, pedido por el usuario: "un tablero en madera algo más atractivo"): arce y nogal,
-// dibujado entero por nuestro generador (PuenteChessnutHIARCS\herramientas\GenerarTableroMadera.cs), 8x8 con a8 clara.
-// Mientras carga (o si no carga) salen los colores lisos de siempre.
-const WOOD = new Image();
-let woodReady = false;
-WOOD.onload = () => { woodReady = true; if (typeof onArtLoaded === 'function') onArtLoaded(); };
-WOOD.src = 'recursos/tablero_madera.jpg';
+// ---- los tableros de madera (28/11, pedido por el usuario: "un tablero en madera algo más atractivo" y "poder elegir
+// entre varios estilos"): dibujados enteros por nuestro generador (PuenteChessnutHIARCS\herramientas\
+// GenerarTableroMadera.cs), recursos/tablero_madera_<estilo>.jpg, 8x8 con a8 clara. "lisa": los colores de siempre
+// (también mientras carga la imagen).
+const BOARD_STYLES = [['arce', 'Arce (claro)'], ['roble', 'Roble'], ['cerezo', 'Abedul y cerezo'], ['caoba', 'Haya y caoba'],
+  ['palisandro', 'Boj y palisandro'], ['nogal', 'Arce y nogal (oscuro)'], ['lisa', 'Lisa (la de antes)']];
+let WOOD = null, woodReady = false, boardStyle = 'arce';
+function setBoardStyle(id) {
+  boardStyle = BOARD_STYLES.some(s => s[0] === id) ? id : 'arce';
+  woodReady = false;
+  WOOD = null;
+  if (boardStyle === 'lisa') return;
+  const im = new Image();
+  im.onload = () => { if (WOOD === im) { woodReady = true; if (typeof onArtLoaded === 'function') onArtLoaded(); } };
+  im.src = 'recursos/tablero_madera_' + boardStyle + '.jpg';
+  WOOD = im;
+}
 
 /** Prepara un lienzo a su tamaño en pantalla (nítido en pantallas de alta densidad); devuelve el contexto. */
 function fitCanvas(cv) {
@@ -164,7 +174,7 @@ function drawBoard(cv, o) {
   for (let s = 0; s < 64; s++) {
     const [c, r] = xy(s), x = frame + c * sq, y = frame + r * sq;
     const light = ((s >> 3) + (s & 7)) % 2 === 1;
-    if (woodReady) {
+    if (woodReady && WOOD) {
       // la casilla de la pantalla (c, r) sale de la misma casilla de la imagen: arriba a la izquierda siempre es clara
       // (a8, o h1 con el tablero girado), así que los colores cuadran en los dos sentidos
       const t = WOOD.naturalWidth / 8;
