@@ -837,6 +837,16 @@ function material(b) {
   return [w, k];
 }
 
+/** La diferencia de material en piezas (28/11, pedido por el usuario: "con una pieza de ajedrez equivalente, distinguiendo
+ *  cuando la ventaja es para las blancas y cuando para las negras"): peón 1, caballo (o alfil) 3, torre 5, dama 9, de la
+ *  mayor a la menor (4 = ♘♙, 6 = ♖♙), en blancas si van ganando las blancas (d > 0) y en negras si las negras; 4 como mucho. */
+function materialPieces(d) {
+  let v = Math.abs(d), n = 0, s = '';
+  const worth = [9, 5, 3, 1], w = '♕♖♘♙', k = '♛♜♞♟';
+  for (let i = 0; i < 4; i++) while (v >= worth[i] && n < 4) { s += (d > 0 ? w : k)[i] + '︎'; v -= worth[i]; n++; }
+  return s + (v > 0 ? '…' : '');
+}
+
 /** Una imagen del tablero o de las piezas acaba de cargar (tablero.js): se vuelve a dibujar. */
 function onArtLoaded() { scheduleRender(); }
 
@@ -945,7 +955,7 @@ function render() {
   mt.style.display = S.materialOn ? '' : 'none';
   if (S.materialOn) {
     const [w, k] = material(normalize(shown)), d = w - k;
-    mt.innerHTML = '<span class="k">Material:</span>  <b>' + (d === 0 ? 'igualado' : d > 0 ? '+' + d + ' blancas' : '+' + (-d) + ' negras') + '</b>     <span class="r">blancas ' + w + '  ·  negras ' + k + '</span>';
+    mt.innerHTML = '<span class="k">Material:</span>  <b>' + (d === 0 ? 'igualado' : (d > 0 ? '+' + d + ' blancas' : '+' + (-d) + ' negras') + '  = ' + materialPieces(d)) + '</b>     <span class="r">blancas ' + w + '  ·  negras ' + k + '</span>';
   }
   // turno y profundidad
   $('analysisRow').style.display = analysisOn() ? '' : 'none';
