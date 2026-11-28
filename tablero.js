@@ -46,14 +46,44 @@ const PIECE_PARTS = (() => {
   };
 })();
 
+// ---- (28/11, pedido por el usuario: más juegos de piezas) juegos libres de Lichess (github.com/lichess-org/lila,
+// public/piece), en piezas/<juego>/wK.svg...: Maestro, Staunty, Tatiana y Cardinal (sadsnake1) y California (Jerry S.),
+// CC BY-NC-SA 4.0; Merida (Armando Hernández Marroquín), GPLv2+; Leipzig (A. H. Marroquín), freeware; Chessnut (Alexis
+// Luengas), Apache 2.0. "staunton": las de siempre, dibujadas aquí.
+const PIECE_SETS = [['staunton', 'Staunton'], ['maestro', 'Maestro'], ['merida', 'Merida'], ['california', 'California'],
+  ['staunty', 'Staunty'], ['tatiana', 'Tatiana'], ['cardinal', 'Cardinal'], ['leipzig', 'Leipzig'], ['chessnut', 'Chessnut']];
+let pieceSet = 'staunton';
+const svgImages = new Map();
+/** El SVG de la pieza en el juego elegido (cargándose: null; al cargar se vuelve a dibujar). */
+function pieceSvg(set, piece) {
+  const key = set + piece;
+  let im = svgImages.get(key);
+  if (!im) {
+    im = new Image();
+    im.onload = () => { pieceCache.clear(); if (typeof onArtLoaded === 'function') onArtLoaded(); };
+    im.src = 'piezas/' + set + '/' + (piece === piece.toUpperCase() ? 'w' : 'b') + piece.toUpperCase() + '.svg';
+    svgImages.set(key, im);
+  }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
+function setPieceSet(id) { pieceSet = PIECE_SETS.some(s => s[0] === id) ? id : 'staunton'; pieceCache.clear(); }
+
 const pieceCache = new Map();
 /** La pieza dibujada en un cuadrado de size píxeles (con sombra suave y un poco de relieve, como en Android). */
 function pieceImage(piece, size) {
-  const key = piece + size;
+  const key = pieceSet + piece + size;
   if (pieceCache.has(key)) return pieceCache.get(key);
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d');
+  if (pieceSet !== 'staunton') {
+    const im = pieceSvg(pieceSet, piece);
+    if (!im) return c;                                   // (aún cargando: vacía y sin guardar; se dibuja al cargar)
+    g.drawImage(im, 0, 0, size, size);
+    if (pieceCache.size > 60) pieceCache.clear();
+    pieceCache.set(key, c);
+    return c;
+  }
   const parts = PIECE_PARTS[piece];
   if (parts) {
     g.scale(size / 45, size / 45);
@@ -92,6 +122,14 @@ const GRADE = {
 const gradeText = l => l === 'Imprecision' ? 'Imprecisión' : l;
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
 
+// ---- el tablero de madera (28/11, pedido por el usuario: "un tablero en madera algo más atractivo"): arce y nogal,
+// dibujado entero por nuestro generador (PuenteChessnutHIARCS\herramientas\GenerarTableroMadera.cs), 8x8 con a8 clara.
+// Mientras carga (o si no carga) salen los colores lisos de siempre.
+const WOOD = new Image();
+let woodReady = false;
+WOOD.onload = () => { woodReady = true; if (typeof onArtLoaded === 'function') onArtLoaded(); };
+WOOD.src = 'recursos/tablero_madera.jpg';
+
 /** Prepara un lienzo a su tamaño en pantalla (nítido en pantallas de alta densidad); devuelve el contexto. */
 function fitCanvas(cv) {
   const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
@@ -126,8 +164,15 @@ function drawBoard(cv, o) {
   for (let s = 0; s < 64; s++) {
     const [c, r] = xy(s), x = frame + c * sq, y = frame + r * sq;
     const light = ((s >> 3) + (s & 7)) % 2 === 1;
-    g.fillStyle = light ? '#F0D9B5' : '#B58863';
-    g.fillRect(x, y, sq + 0.5, sq + 0.5);
+    if (woodReady) {
+      // la casilla de la pantalla (c, r) sale de la misma casilla de la imagen: arriba a la izquierda siempre es clara
+      // (a8, o h1 con el tablero girado), así que los colores cuadran en los dos sentidos
+      const t = WOOD.naturalWidth / 8;
+      g.drawImage(WOOD, c * t, r * t, t, t, x, y, sq + 0.5, sq + 0.5);
+    } else {
+      g.fillStyle = light ? '#F0D9B5' : '#B58863';
+      g.fillRect(x, y, sq + 0.5, sq + 0.5);
+    }
     if (o.last && (s === o.last.from || s === o.last.to)) {
       const gr = GRADE[o.last.label];
       g.fillStyle = gr ? hexA(gr.color, s === o.last.to ? 0.59 : 0.45) : 'rgba(255,225,77,0.55)';

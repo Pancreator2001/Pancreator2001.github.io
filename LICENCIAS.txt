@@ -23,6 +23,22 @@ AJEDREZ CONTRA MAIA (WEB) - PROCEDENCIA Y LICENCIAS
 * Las piezas Staunton dibujadas (tablero.js): el juego clasico de Colin M. L.
   Burnett (Wikimedia Commons; el de Lichess), licencias GPL / BSD / GFDL.
 
+* Los demas juegos de piezas (carpeta piezas/), tal cual, de Lichess
+  (https://github.com/lichess-org/lila, carpeta public/piece; autores y
+  licencias segun su COPYING.md), sin cambios:
+  - Maestro, Staunty, Tatiana y Cardinal: sadsnake1, licencia CC BY-NC-SA 4.0
+    (https://creativecommons.org/licenses/by-nc-sa/4.0/).
+  - California: Jerry S. (https://sites.google.com/view/jerrychess/home),
+    CC BY-NC-SA 4.0.
+  - Merida: Armando Hernandez Marroquin, GPLv2 o posterior.
+  - Leipzig: Armando Hernandez Marroquin, "freeware".
+  - Chessnut: Alexis Luengas (https://github.com/LexLuengas/chessnut-pieces),
+    Apache 2.0.
+
+* El tablero de madera (recursos/tablero_madera.jpg): dibujado entero por un
+  programa propio (GenerarTableroMadera.cs, ruido de valores; sin fotos ni
+  imagenes de nadie), libre.
+
 * La lista de aperturas (recursos/aperturas.tsv.gz): la de Lichess
   (https://github.com/lichess-org/chess-openings), dominio publico (CC0),
   con los nombres traducidos al espanol.

@@ -46,10 +46,11 @@ function load(key, def) { try { const v = localStorage.getItem(key); return v ? 
   if (typeof p.materialOn === 'boolean') S.materialOn = p.materialOn;
   if (p.candCount >= 0 && p.candCount <= 5) S.candCount = p.candCount;
   if (CLOCKS.includes(p.clockCtl)) S.clockCtl = p.clockCtl;
+  setPieceSet(p.pieces || 'staunton');
   S.flipped = !S.humanWhite;
 })();
 function savePrefs() {
-  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl });
+  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl, pieces: pieceSet });
 }
 
 /** La partida en curso, para seguirla si se cierra o recarga la página (como la app: si el tablero coincide). */
@@ -835,6 +836,9 @@ function material(b) {
   return [w, k];
 }
 
+/** Una imagen del tablero o de las piezas acaba de cargar (tablero.js): se vuelve a dibujar. */
+function onArtLoaded() { scheduleRender(); }
+
 let renderQueued = false;
 function scheduleRender() {
   if (renderQueued) return;
@@ -848,7 +852,7 @@ function render() {
   const backTo = S.undo ? p.positions[S.undo.k].b : null;
   const editing = S.settingUp && onScreen() && S.editBoard;    // montando en la pantalla
   const ri = reviewIndex();                                     // una jugada de la lista que se está mirando (27/11)
-  const viewed = ri >= 0 ? p.positions[ri + 1].b : null;
+  const viewed = ri >= 0 ? p.positions[ri + 1].b : ri === REVIEW_START ? p.positions[0].b : null;   // (⏮: el principio)
   const shown = backTo || viewed || (editing ? S.editBoard : connected() && S.physical ? S.physical : pos.b);
   // la última jugada con su nota (volviendo atrás: la última que queda; mirando una: esa)
   const graded = analysisOn();
@@ -926,8 +930,9 @@ function render() {
     : S.maiaState === 'error' ? dot(RED) + 'Maia no arranca: ' + esc(S.maiaError) : dot(AMBER) + 'Cargando Maia ' + S.level + '...');
   $('status').innerHTML = st;
   const info = $('info');
-  const rm = viewed ? p.moves[ri] : null;
-  info.textContent = rm ? 'Viendo ' + (rm.white ? rm.number + '. ' : rm.number + '... ') + rm.san + ': toca otra vez la jugada, o el tablero, para volver a la partida'
+  const rm = viewed ? p.moves[ri === REVIEW_START ? 0 : ri] : null;
+  const mtext = m => (m.white ? m.number + '. ' : m.number + '... ') + m.san;
+  info.textContent = rm ? (ri === REVIEW_START ? 'Viendo el inicio (antes de ' + mtext(rm) + ')' : 'Viendo ' + mtext(rm)) + ': ▶▶, o toca el tablero, para volver a la partida'
                    : S.over && !S.info.startsWith('Partida terminada') ? 'Partida terminada: ' + S.over
                    : onScreen() && S.info === 'Te toca' ? 'Te toca: toca una pieza y luego su casilla (o arrástrala)'
                    : onScreen() && S.settingUp ? 'Montando posición: elige una pieza abajo y toca las casillas (otra vez: se quita; sin elegir, toca una pieza y luego dónde va, o arrástrala); luego pulsa quién empieza'
@@ -957,6 +962,7 @@ function render() {
   $('btnConnect').textContent = connected() ? 'Chessnut conectado' : nut.device ? 'Reconectar Chessnut' : 'Conectar Chessnut';
   $('btnConnect').disabled = connected();
   renderMoves(graded);
+  renderNav();
 }
 
 let shownMovesKey = '';
@@ -998,7 +1004,8 @@ function renderMoves(graded) {
   else if (res) h += '<div class="mrow"><div class="num"></div>' + resCell + '<div class="cell"></div></div>';
   if (S.over) h += '<div class="empty"><b>' + esc(S.over) + '</b></div>';
   box.innerHTML = h;
-  if (S.review < 0) box.scrollTop = box.scrollHeight;
+  if (S.review === -1) box.scrollTop = box.scrollHeight;
+  else if (S.review >= 0) { const c = box.querySelector('.cell[data-i="' + S.review + '"]'); if (c) c.scrollIntoView({ block: 'nearest' }); }
 }
 
 // ---- una jugada de la lista (27/11, pedido por el usuario: "cuando pulse la lista de jugadas en una jugada concreta,
@@ -1007,12 +1014,42 @@ function renderMoves(graded) {
 // tocando el tablero o al seguir la partida. Solo la pantalla: el Chessnut y la partida no se tocan.
 
 const reviewKeyNow = () => S.partida.moves.length + '|' + (S.physical ? S.physical.join('') : '');
+const REVIEW_START = -2;            // S.review: la posición de antes de la primera jugada (⏮, 28/11)
 
-/** La jugada que se está mirando, si sigue valiendo (si no, de vuelta a la partida: -1). */
+/** La jugada que se está mirando, si sigue valiendo (si no, de vuelta a la partida: -1; el principio: REVIEW_START). */
 function reviewIndex() {
-  if (S.review < 0) return -1;
-  if (S.review >= S.partida.moves.length || S.undo || S.settingUp || reviewKeyNow() !== S.reviewKey) S.review = -1;
+  if (S.review === -1) return -1;
+  if (S.review >= S.partida.moves.length || !S.partida.moves.length || S.undo || S.settingUp || reviewKeyNow() !== S.reviewKey) S.review = -1;
   return S.review;
+}
+
+// ---- ⏮ ◀ ▶ ⏭ (28/11, pedido por el usuario: "una especie de flechas para avanzar y retroceder en las jugadas"), en la
+// cabecera de la lista: el principio, la jugada anterior y la siguiente a la que se mira (desde la partida, ◀ es la de
+// antes de la última) y volver a la partida
+function navMoves(k) {
+  const n = S.partida.moves.length;
+  if (!n) return;
+  const r = reviewIndex();
+  const cur = r === REVIEW_START ? -1 : r >= 0 ? r : n - 1;
+  let to;
+  if (k === 0) to = -1;
+  else if (k === 1) to = cur - 1;
+  else if (k === 2) { if (r === -1) return; to = cur + 1; }
+  else to = n - 1;
+  if (to < -1) return;
+  S.review = to >= n - 1 ? -1 : to === -1 ? REVIEW_START : to;     // la última jugada: la partida tal cual
+  S.reviewKey = reviewKeyNow();
+  clearSel();
+  scheduleRender();
+}
+['navFirst', 'navPrev', 'navNext', 'navLast'].forEach((id, k) => $(id).addEventListener('click', () => navMoves(k)));
+
+/** En cada dibujo: cada flecha solo funciona donde puede ir. */
+function renderNav() {
+  const r = reviewIndex(), free = S.partida.moves.length > 0 && !S.undo && !S.settingUp;
+  const back = free && r !== REVIEW_START, fwd = free && r !== -1;
+  $('navFirst').disabled = $('navPrev').disabled = !back;
+  $('navNext').disabled = $('navLast').disabled = !fwd;
 }
 
 $('moves').addEventListener('click', e => {
@@ -1025,7 +1062,7 @@ $('moves').addEventListener('click', e => {
   scheduleRender();
 });
 
-function endReview() { if (S.review >= 0) { S.review = -1; scheduleRender(); } }
+function endReview() { if (S.review !== -1) { S.review = -1; scheduleRender(); } }
 
 /** El tamaño del tablero: a todo lo ancho en el móvil, dejando sitio al panel debajo. */
 function layout() {
@@ -1066,7 +1103,7 @@ function longPress(el, onTap, onLong) {
   let start = null, timer = null, longFired = false, dragging = false, from = -1;
   const pt = e => { const r = el.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   el.addEventListener('pointerdown', e => {
-    if (S.review >= 0) { endReview(); start = null; return; }     // mirando una jugada de la lista: de vuelta a la partida
+    if (S.review !== -1) { endReview(); start = null; return; }     // mirando una jugada de la lista: de vuelta a la partida
     const p = pt(e);
     start = p; longFired = false; dragging = false;
     from = geo ? squareAt(geo, p.x, p.y) : -1;
@@ -1108,6 +1145,7 @@ fill($('level'), LEVELS.map(l => [l, l]), S.level);
 fill($('pause'), Array.from({ length: 11 }, (_, i) => [i, i + ' s']), S.pause);
 fill($('candCount'), [0, 1, 2, 3, 4, 5].map(i => [i, i]), S.candCount);
 fill($('clockSel'), CLOCKS.map(c => [c, clockName(c)]), S.clockCtl);
+fill($('pieceSel'), PIECE_SETS, pieceSet);
 $('color').value = S.humanWhite ? 'w' : 'b';
 $('variety').checked = S.variety;
 $('chkBar').checked = S.barOn;
@@ -1130,6 +1168,7 @@ $('chkBar').onchange = () => { S.barOn = $('chkBar').checked; savePrefs(); analy
 $('chkMaterial').onchange = () => { S.materialOn = $('chkMaterial').checked; savePrefs(); scheduleRender(); };
 $('candCount').onchange = () => { S.candCount = +$('candCount').value; savePrefs(); analyze(); layout(); };
 $('clockSel').onchange = () => { S.clockCtl = $('clockSel').value; savePrefs(); clock.setControl(S.clockCtl); updateClock(); log('Reloj: ' + clockName(S.clockCtl) + '.'); scheduleRender(); };
+$('pieceSel').onchange = () => { setPieceSet($('pieceSel').value); savePrefs(); scheduleRender(); };
 $('turn').onclick = toggleTurn;
 $('btnBack').onclick = () => { if (S.settingUp) startFrom(true); else back(); };
 $('btnSetup').onclick = () => { if (S.settingUp) startFrom(false); else startSetUp(); };
