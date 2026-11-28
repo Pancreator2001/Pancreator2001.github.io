@@ -40,6 +40,10 @@ AJEDREZ CONTRA MAIA (WEB) - PROCEDENCIA Y LICENCIAS
   propio (GenerarTableroMadera.cs, ruido de valores; sin fotos ni imagenes de
   nadie), libres.
 
+* Los sonidos de las jugadas (recursos/sonidos): mover.wav es una grabacion
+  propia de una pieza de ajedrez (cedida por su autor para este programa);
+  comer.wav esta hecho con ella (dos golpes, HacerSonidos.cs).
+
 * La lista de aperturas (recursos/aperturas.tsv.gz): la de Lichess
   (https://github.com/lichess-org/chess-openings), dominio publico (CC0),
   con los nombres traducidos al espanol.

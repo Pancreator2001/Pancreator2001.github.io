@@ -36,6 +36,8 @@ let geo = null, reviewFen = null;
 function store(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { } }
 function load(key, def) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch (e) { return def; } }
 
+const SND = { ctx: null, buf: {}, on: true, count: -1, key: '' };   // el sonido de las jugadas (28/11; más abajo)
+
 (() => {
   const p = load('maia-web', {});
   if (LEVELS.includes(p.level)) S.level = p.level;
@@ -48,10 +50,11 @@ function load(key, def) { try { const v = localStorage.getItem(key); return v ? 
   if (CLOCKS.includes(p.clockCtl)) S.clockCtl = p.clockCtl;
   setPieceSet(p.pieces || 'staunton');
   setBoardStyle(p.board || 'arce');
+  if (typeof p.sound === 'boolean') SND.on = p.sound;
   S.flipped = !S.humanWhite;
 })();
 function savePrefs() {
-  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl, pieces: pieceSet, board: boardStyle });
+  store('maia-web', { level: S.level, humanWhite: S.humanWhite, variety: S.variety, pause: S.pause, barOn: S.barOn, materialOn: S.materialOn, candCount: S.candCount, clockCtl: S.clockCtl, pieces: pieceSet, board: boardStyle, sound: SND.on });
 }
 
 /** La partida en curso, para seguirla si se cierra o recarga la página (como la app: si el tablero coincide). */
@@ -847,6 +850,33 @@ function materialPieces(d) {
   return s + (v > 0 ? '…' : '');
 }
 
+// ---- el sonido de las jugadas (28/11, pedido por el usuario: "el sonido que te dejo en el escritorio de mover pieza", con
+// un selector para activarlo o desactivarlo): su grabación (recursos/sonidos/mover.wav) y, al comer, dos golpes hechos con
+// ella (comer.wav). Web Audio: en el iPhone solo puede sonar después de un toque en la página, así que se prepara con el
+// primero. No suena la lista que había al abrir, ni al deshacer, ni al empezar otra partida. (SND: al principio del archivo)
+function soundUnlock() {
+  try {
+    if (!SND.ctx) {
+      SND.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      for (const n of ['mover', 'comer'])
+        fetch('recursos/sonidos/' + n + '.wav').then(r => r.arrayBuffer()).then(a => SND.ctx.decodeAudioData(a, d => { SND.buf[n] = d; })).catch(() => {});
+    }
+    if (SND.ctx.state === 'suspended') SND.ctx.resume();
+  } catch (e) { }
+}
+['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, soundUnlock, { passive: true }));
+function soundPlay(name) {
+  if (!SND.on || !SND.ctx || !SND.buf[name]) return;
+  try { const s = SND.ctx.createBufferSource(); s.buffer = SND.buf[name]; s.connect(SND.ctx.destination); s.start(); } catch (e) { }
+}
+function checkMoveSound() {
+  const m = S.partida.moves, n = m.length, last = n ? m[n - 1] : null;
+  const key = last ? n + '|' + last.uci + '|' + S.partida.positions[n].fen() : '';
+  if (SND.count >= 0 && n === SND.count + 1 && key !== SND.key && last) soundPlay(last.san.includes('x') ? 'comer' : 'mover');
+  SND.count = n;
+  SND.key = key;
+}
+
 /** Una imagen del tablero o de las piezas acaba de cargar (tablero.js): se vuelve a dibujar. */
 function onArtLoaded() { scheduleRender(); }
 
@@ -974,6 +1004,7 @@ function render() {
   $('btnConnect').disabled = connected();
   renderMoves(graded);
   renderNav();
+  checkMoveSound();
 }
 
 let shownMovesKey = '';
@@ -1184,6 +1215,8 @@ $('candCount').onchange = () => { S.candCount = +$('candCount').value; savePrefs
 $('clockSel').onchange = () => { S.clockCtl = $('clockSel').value; savePrefs(); clock.setControl(S.clockCtl); updateClock(); log('Reloj: ' + clockName(S.clockCtl) + '.'); scheduleRender(); };
 $('pieceSel').onchange = () => { setPieceSet($('pieceSel').value); savePrefs(); scheduleRender(); };
 $('boardSel').onchange = () => { setBoardStyle($('boardSel').value); savePrefs(); scheduleRender(); };
+$('soundOn').checked = SND.on;
+$('soundOn').onchange = () => { SND.on = $('soundOn').checked; savePrefs(); if (SND.on) { soundUnlock(); setTimeout(() => soundPlay('mover'), 150); } };
 $('turn').onclick = toggleTurn;
 $('btnBack').onclick = () => { if (S.settingUp) startFrom(true); else back(); };
 $('btnSetup').onclick = () => { if (S.settingUp) startFrom(false); else startSetUp(); };
